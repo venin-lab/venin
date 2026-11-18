@@ -601,6 +601,11 @@ impl Runner<'_> {
         if let Ok(entries) = std::fs::read_dir(&modules) {
             read.extend(entries.flatten().map(|e| real(&e.path())));
         }
+        // On Linux Playwright probes these two for WSL, and the permission model refuses a read it was not given,
+        // even of a path that does not exist, so the render stopped before its first frame.
+        read.extend(
+            ["/proc/sys/fs/binfmt_misc/WSLInterop", "/run/WSL"].map(std::path::PathBuf::from),
+        );
         let mut command = crate::command("node".as_ref());
         if let Some(browsers) = playwright_browsers() {
             read.push(real(&browsers));
