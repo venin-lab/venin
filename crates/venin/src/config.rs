@@ -413,7 +413,7 @@ pub mod tests {
         assert_eq!((c.anchor.chain_id, c.draw.chain_id), (4663, 4663));
         assert_eq!(
             c.budget.as_ref().map(|b| b.daily_cap_micro),
-            Some(2_500_000)
+            Some(5_000_000)
         );
         assert!(c.release.is_none() && !c.host_check.enabled && c.llama_server.is_none());
         assert_eq!(

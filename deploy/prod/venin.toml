@@ -54,9 +54,11 @@ gas_limit_max = 40000
 max_fee_per_gas_max = "1000000000"
 daily_cap_wei = "500000000000000"
 
-# $2.50 a day: each period may spend a 24th of it plus what earlier periods left, up to one day's cap.
+# $5 a day: each period may spend a 24th of it plus what earlier periods left, up to one day's cap. Hour 0 cost
+# $0.103 for its 60 runs, about $2.50 a day; the rest leaves room for holder strains, which are cut first when it runs
+# short.
 [budget]
-daily_cap_micro = 2500000
+daily_cap_micro = 5000000
 
 # Ids, providers and prices as OpenRouter listed them on 17 Nov 2026 (api/v1/models/<id>/endpoints), checked again on
 # 18 Nov with one paid tool call per model (each served by its pinned provider, no safeguard result); check them again
