@@ -1,0 +1,7 @@
+# The dev chain's stand-in for the token: compiled with forge, deployed by `./dev up` to the local anvil only.
+[profile.default]
+src = "src"
+test = "test"
+out = "out"
+cache_path = "cache"
+solc_version = "0.8.30"

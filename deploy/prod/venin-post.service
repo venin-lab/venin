@@ -1,0 +1,26 @@
+# Posts the latest hour's caption and card on X (`venin post`), started every minute by venin-post.timer. Posting is
+# off until /etc/venin/post.env (mode 0600, root) holds VENIN_X_POST=on beside VENIN_X_CONSUMER_KEY,
+# VENIN_X_CONSUMER_SECRET, VENIN_X_TOKEN and VENIN_X_TOKEN_SECRET; off, each new hour's text is only written to the
+# journal. It runs as a user of its own, so it cannot reach the runner's keys or files through /proc; it reads the
+# data folder, which must be world-readable (the record is public), and keeps its state in /var/lib/venin-post.
+
+[Unit]
+Description=Venin hourly post
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+StateDirectory=venin-post
+WorkingDirectory=/opt/venin
+EnvironmentFile=-/etc/venin/post.env
+ExecStart=/opt/venin/target/release/venin post --config deploy/prod/venin.toml --state-dir /var/lib/venin-post
+ProtectProc=invisible
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+LockPersonality=yes
+# Its keys come in through the environment file, which systemd reads before this applies.
+InaccessiblePaths=/etc/venin

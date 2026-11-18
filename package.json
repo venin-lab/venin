@@ -1,0 +1,12 @@
+{
+  "name": "venin",
+  "private": true,
+  "packageManager": "pnpm@11.6.0",
+  "scripts": {
+    "dev": "pnpm --filter venin-web dev",
+    "build": "pnpm --filter venin-web build",
+    "check": "pnpm --filter venin-web check",
+    "shots": "pnpm --filter venin-web shots",
+    "fps": "pnpm --filter venin-web fps"
+  }
+}

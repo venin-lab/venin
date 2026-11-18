@@ -1,0 +1,42 @@
+{
+  "$schema": "./web/node_modules/@biomejs/biome/configuration_schema.json",
+  "files": {
+    "includes": [
+      "web/**",
+      "worker/**",
+      "!**/node_modules",
+      "!**/dist",
+      "!**/.wrangler",
+      "!web/public",
+      "!web/src/wasm"
+    ]
+  },
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 120
+  },
+  "linter": {
+    "enabled": true
+  },
+  "assist": {
+    "enabled": true
+  },
+  "overrides": [
+    {
+      "includes": [
+        "**/*.css"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDescendingSpecificity": "off"
+          },
+          "complexity": {
+            "noImportantStyles": "off"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+# The release Worker: POST /api/release queues a holder's burned strain, GET /api/queue hands the queue to the runner.
+# Production values (token, amount, RPC) are set at launch; an empty ALLOWED_ORIGIN serves same-origin pages only.
+# The queue token is a secret (`wrangler secret put QUEUE_TOKEN`). `./dev up` runs it locally with `--var` values for
+# the dev anvil.
+name = "venin-release"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[[r2_buckets]]
+binding = "QUEUE"
+bucket_name = "venin-queue"
+
+[[ratelimits]]
+name = "LIMITER"
+namespace_id = "4663001"
+simple = { limit = 10, period = 60 }
+
+[vars]
+CHAIN_ID = "4663"
+TOKEN = ""
+BURN_AMOUNT = ""
+RPC_URL = "https://rpc.mainnet.chain.robinhood.com"
+ALLOWED_ORIGIN = ""

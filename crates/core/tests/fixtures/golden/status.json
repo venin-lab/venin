@@ -1,0 +1,1 @@
+{"n":1,"anchor_lag_s":60,"runway_days":365,"void_share_ppm":16666,"models":[{"column":"m1","valid":30,"void":0,"malformed":0},{"column":"m2","valid":30,"void":0,"malformed":0},{"column":"m3","valid":29,"void":1,"malformed":0},{"column":"m4","valid":30,"void":0,"malformed":0}],"updated_s":1798768230}

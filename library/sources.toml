@@ -1,0 +1,70 @@
+[[source]]
+id = "llmail_inject"
+name = "LLMail-Inject: Adaptive Prompt Injection Challenge (Microsoft)"
+url = "https://huggingface.co/datasets/microsoft/llmail-inject-challenge"
+commit = "1063bdf01ec8762b812d5e06ee768a06faa5a6f7"
+files = [
+  { path = "data/labelled_unique_submissions_phase2.json", sha256 = "f89af984e345430c3b357903890e30867bf4676f4ef10c138cc7bad218e890b8" },
+]
+license = "MIT"
+use = "EAR e-mail strains: rows with api_triggered kept, the fixed goal (an e-mail to contact@contact.com) rewritten to placeholders, exact duplicates removed after normalization."
+
+[[source]]
+id = "injecagent"
+name = "InjecAgent (UIUC Kang Lab)"
+url = "https://github.com/uiuc-kang-lab/InjecAgent"
+commit = "f19c9f2c79a41046eb13c03c51a24c567a8ffa07"
+files = [
+  { path = "data/attacker_cases_dh.jsonl", sha256 = "999d52e15af3c80a3303a09430af0f3878d1f91e4c573ca7b477a91cdfa6b991" },
+  { path = "data/attacker_cases_ds.jsonl", sha256 = "87952398c989d8ca841724e38ecdbb789676d3841e19dfc44aac7b710df9cb1f" },
+]
+license = "MIT"
+use = "Data-stealing attacker instructions rewritten as exfil strains with placeholders; direct-harm cases dropped."
+
+[[source]]
+id = "asb"
+name = "Agent Security Bench (AGI Research)"
+url = "https://github.com/agiresearch/ASB"
+commit = "544540ff0788998072f7df463056fd17e62cc9f4"
+files = [
+  { path = "data/all_attack_tools.jsonl", sha256 = "9205bf61f1c34f4be5b644ae829da22042c92a86d4d1e70352ccec5f60cf12d6" },
+]
+license = "MIT"
+use = "Attacker tool descriptions rewritten as EYE strains, goals replaced with placeholders."
+
+[[source]]
+id = "agentdojo"
+name = "AgentDojo (ETH Zurich SPY Lab)"
+url = "https://github.com/ethz-spylab/agentdojo"
+commit = "089ed468cf3ed0322acc66b0211f26d9d90dbf60"
+files = [
+  { path = "src/agentdojo/default_suites/v1/banking/user_tasks.py", sha256 = "37af838194f001af80cc040315bcb2d69d0112324d424f9a323473b41b317f82" },
+  { path = "src/agentdojo/default_suites/v1/banking/injection_tasks.py", sha256 = "fa2dedf8e66c95ffadb54f5a26648728b08c56f302858de4ee9a5cc0b3891618" },
+  { path = "src/agentdojo/data/suites/banking/environment.yaml", sha256 = "3f539da1d97779b244cd122afc683dc69d602f338e1b3c42d126cbde33611c8b" },
+  { path = "src/agentdojo/data/suites/banking/injection_vectors.yaml", sha256 = "4eb98a601c108d9b4d88f5d3f2dbf455f775a718975a0ae2624b4cf0d0f6f819" },
+]
+license = "MIT"
+use = "Banking suite user tasks and injection vectors hand-ported into tasks.jsonl in a fictional world, each credited by source_ref."
+
+[[source]]
+id = "deepset"
+name = "deepset prompt-injections"
+url = "https://huggingface.co/datasets/deepset/prompt-injections"
+commit = "4f61ecb038e9c3fb77e21034b22511b523772cdd"
+files = [
+  { path = "data/train-00000-of-00001-9564e8b05b4757ab.parquet", sha256 = "2e10bc7ab30f542c97e4e83e2a5683000b5057d25ec10908784c631d44124c04" },
+  { path = "data/test-00000-of-00001-701d16158af87368.parquet", sha256 = "39ac797cabc157eeed58435a08593b2952bb6cb16fc394a2d383f447cc7b246e" },
+]
+license = "Apache-2.0 AND CC-BY-4.0"
+use = "English rows as inspiration for decoy wording; the card declares apache-2.0 and, under dataset_info, cc-by-4.0, and both are honoured."
+
+[[source]]
+id = "garak"
+name = "garak, LLM vulnerability scanner (NVIDIA)"
+url = "https://github.com/NVIDIA/garak"
+commit = "892779207cbc38f65a738ef9cbdfbc1e83aa0b55"
+files = [
+  { path = "garak/probes/encoding.py", sha256 = "3f977b6e1c065d3736d01bfa9f2428ab0345549c2714794ef21c961c142520dc" },
+]
+license = "Apache-2.0"
+use = "Encoding probes (base64, hex, ROT13) as techniques for encoded strains; no probe text copied."

@@ -1,0 +1,25 @@
+# Sends the record's new files to its public bucket (`venin upload`), started every minute by venin-upload.timer.
+# Needs /etc/venin/upload.env (mode 0600, root) with VENIN_R2_ENDPOINT, VENIN_R2_KEY_ID and VENIN_R2_SECRET. It runs
+# as a user of its own, so it cannot reach the runner's keys or files through /proc; it reads the data folder, which
+# must be world-readable (the record is public), and keeps its state in /var/lib/venin-upload.
+
+[Unit]
+Description=Venin record upload
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+StateDirectory=venin-upload
+WorkingDirectory=/opt/venin
+EnvironmentFile=/etc/venin/upload.env
+ExecStart=/opt/venin/target/release/venin upload --config deploy/prod/venin.toml --state-dir /var/lib/venin-upload
+ProtectProc=invisible
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+LockPersonality=yes
+# Its keys come in through the environment file, which systemd reads before this applies.
+InaccessiblePaths=/etc/venin

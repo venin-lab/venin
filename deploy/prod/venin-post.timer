@@ -1,0 +1,12 @@
+# Runs venin-post.service every minute: `systemctl enable --now venin-post.timer`.
+
+[Unit]
+Description=Post the Venin hour on X
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=1min
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

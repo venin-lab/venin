@@ -1,0 +1,38 @@
+# The production runner on a VPS (2 GB RAM or more, for the headless card render).
+# Install: a `venin` system user with home /var/lib/venin; the tagged release checked out and built in /opt/venin
+# (cargo build --release, pnpm install and build in web/, the Playwright headless shell under
+# /var/lib/venin/ms-playwright); /etc/venin/env (mode 0600, root) holding VENIN_OPENROUTER_KEY and, once the release
+# opens, VENIN_QUEUE_TOKEN; /etc/venin/anchor.key (mode 0600, owner venin) once the anchor is approved. Then
+# `systemctl enable --now venin`. `venin pause` and `venin resume` work while it runs. The record's upload and the
+# hourly post run from their own timers: venin-upload.timer and venin-post.timer.
+
+[Unit]
+Description=Venin lab runner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=venin
+Group=venin
+WorkingDirectory=/opt/venin
+EnvironmentFile=/etc/venin/env
+Environment=PLAYWRIGHT_BROWSERS_PATH=/var/lib/venin/ms-playwright
+ExecStart=/opt/venin/target/release/venin run --config deploy/prod/venin.toml
+Restart=on-failure
+RestartSec=60
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths=/var/lib/venin
+ReadOnlyPaths=/etc/venin
+
+[Install]
+WantedBy=multi-user.target

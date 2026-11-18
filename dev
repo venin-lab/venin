@@ -1,0 +1,207 @@
+#!/usr/bin/env bash
+# Brings the local lab up and down: anvil (the anchor chain, also holding the dev token), the llama-server router (the
+# dev league), the release Worker under wrangler dev, the runner under caffeinate, and the web dev server, each with an
+# environment of PATH and HOME and what it needs. Keys, state and logs live in ~/Documents/venin-dev. The lab's anvil
+# takes 8546 and leaves anvil's default, 8545, alone.
+# Usage: ./dev up | down | status | logs [name]
+set -euo pipefail
+cd "$(dirname "$0")"
+. scripts/env
+
+home="$HOME/Documents/venin-dev"
+logs="$home/logs"
+pids="$home/pids"
+config="deploy/dev/venin.toml"
+anvil_port=8546
+router_port=8090
+worker_port=8787
+web_port=5173
+# The draw chain's public RPC, which answers browsers (CORS); the site's verify reads the draw blocks from it.
+draw_rpc=https://rpc.mainnet.chain.robinhood.com
+# The dev token: deployed by anvil account 1 at nonce 0, so its address is fixed (deploy/dev/venin.toml names it).
+token_address=0x8464135c8F25Da09e49BC8782676a84730C318bC
+# 1,000 tokens of 18 decimals per release; account 2, the dev wallet, holds the whole supply of 1,000,000,000.
+burn_amount=1000000000000000000000
+supply=1000000000000000000000000000
+# Anvil's public test mnemonic; its keys sign only on chain 31337, which the runner enforces.
+mnemonic="test test test test test test test test test test test junk"
+mkdir -p "$logs" "$pids" "$home/models"
+
+running() {
+  [ -f "$pids/$1" ] && kill -0 "$(cat "$pids/$1")" 2>/dev/null
+}
+
+# A service's whole process tree, deepest first: pnpm runs vite and wrangler two levels down, and signalling only the
+# saved pid's children leaves them holding their ports.
+stop_tree() {
+  local child
+  for child in $(pgrep -P "$1"); do
+    stop_tree "$child"
+  done
+  kill -TERM "$1" 2>/dev/null || true
+}
+
+port_taken() {
+  lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
+}
+
+start() {
+  local name="$1"
+  shift
+  if running "$name"; then
+    echo "$name: already running"
+    return
+  fi
+  nohup env -i PATH="$PATH" HOME="$HOME" "$@" >>"$logs/$name.log" 2>&1 &
+  echo $! >"$pids/$name"
+  echo "$name: started (pid $!, log $logs/$name.log)"
+}
+
+wait_port() {
+  local i
+  for i in $(seq 1 60); do
+    port_taken "$1" && return 0
+    sleep 1
+  done
+  echo "dev: nothing listens on port $1 after 60 s" >&2
+  return 1
+}
+
+anchor_key() {
+  local key="$home/anchor.key"
+  [ -f "$key" ] && return
+  (
+    umask 077
+    cast wallet private-key "$mnemonic" 0 >"$key"
+  )
+  echo "anchor key: derived into $key (mode 0600)"
+}
+
+# The dev token on anvil, deployed once; refuses when account 1 has sent anything else, as the address would differ.
+dev_token() {
+  local rpc="http://127.0.0.1:$anvil_port" deployer holder
+  [ "$(cast code --rpc-url "$rpc" "$token_address")" != 0x ] && return
+  deployer="$(cast wallet address --mnemonic "$mnemonic" --mnemonic-index 1)"
+  if [ "$(cast nonce --rpc-url "$rpc" "$deployer")" != 0 ]; then
+    echo "dev: account 1 has sent transactions; the dev token would not land at $token_address" >&2
+    exit 1
+  fi
+  holder="$(cast wallet address --mnemonic "$mnemonic" --mnemonic-index 2)"
+  forge create --root deploy/dev/token src/DevToken.sol:DevToken --broadcast --rpc-url "$rpc" \
+    --private-key "$(cast wallet private-key "$mnemonic" 1)" --constructor-args "$holder" "$supply" >/dev/null
+  echo "dev token: deployed at $token_address, supply held by the dev wallet $holder"
+}
+
+# The bearer token the runner presents to the Worker's queue; local only, never in the repo.
+queue_token() {
+  local file="$home/queue.token"
+  if [ ! -f "$file" ]; then
+    (
+      umask 077
+      openssl rand -hex 32 >"$file"
+    )
+  fi
+  cat "$file"
+}
+
+# Priors' three files are fetched from the registry, not tracked; the sidecar refuses to start without them.
+priors_vendor() {
+  local f
+  for f in fence.mjs pay-hosts.mjs daily.mjs; do
+    if [ ! -f "harness/priors/vendor/$f" ]; then
+      node harness/priors/fetch.mjs
+      return
+    fi
+  done
+}
+
+up() {
+  if ! running anvil && port_taken "$anvil_port"; then
+    echo "dev: port $anvil_port is used by another program; stop it first" >&2
+    exit 1
+  fi
+  # No epoch lag: the `safe` block is the latest, so the runner's intake takes a dev burn the next period.
+  start anvil anvil --host 127.0.0.1 --port "$anvil_port" --chain-id 31337 --slots-in-an-epoch 0 \
+    --state "$home/anvil-state.json" --state-interval 60
+  wait_port "$anvil_port"
+  anchor_key
+  dev_token
+  if ! running router && port_taken "$router_port"; then
+    echo "dev: port $router_port is used by another program; stop it first" >&2
+    exit 1
+  fi
+  # Two 12k slots with a q8_0 cache: a Priors request is about 7k tokens. Two 16k slots took a 16 GB machine under 20%
+  # free memory; the runner also waits before each run while memory is tight (host_check in deploy/dev/venin.toml).
+  start router llama-server --models-dir "$home/models" --models-max 1 -cram 1024 -np 2 -c 24576 \
+    -fa on -ctk q8_0 -ctv q8_0 --prio -1 --reasoning off --host 127.0.0.1 --port "$router_port"
+  wait_port "$router_port"
+  priors_vendor
+  cargo build --release -p venin --quiet
+  if [ -f web/package.json ]; then
+    pnpm --dir web run build
+  fi
+  if ! running worker && port_taken "$worker_port"; then
+    echo "dev: port $worker_port is used by another program; stop it first" >&2
+    exit 1
+  fi
+  start worker WRANGLER_SEND_METRICS=false pnpm --dir worker exec wrangler dev --ip 127.0.0.1 \
+    --port "$worker_port" --persist-to "$home/worker" --var "CHAIN_ID:31337" --var "TOKEN:$token_address" \
+    --var "BURN_AMOUNT:$burn_amount" --var "RPC_URL:http://127.0.0.1:$anvil_port" \
+    --var "ALLOWED_ORIGIN:http://localhost:$web_port" --var "QUEUE_TOKEN:$(queue_token)"
+  if [ -f "$home/data/manifest.json" ]; then
+    start runner VENIN_QUEUE_TOKEN="$(queue_token)" target/release/venin run --config "$config"
+    start caffeinate caffeinate -is -w "$(cat "$pids/runner")"
+  else
+    echo "runner: no genesis yet; run: target/release/venin genesis --config $config"
+  fi
+  if [ -f web/package.json ]; then
+    if ! running web && port_taken "$web_port"; then
+      echo "dev: port $web_port is used by another program; stop it first" >&2
+      exit 1
+    fi
+    # strictPort: vite stops rather than move to the next port, which may belong to another program.
+    start web VITE_ANCHOR_RPC="http://127.0.0.1:$anvil_port" VITE_DRAW_RPC="$draw_rpc" \
+      VITE_DEV_RPC="http://127.0.0.1:$anvil_port" \
+      VITE_DEV_TOKEN="$token_address" VITE_DEV_AMOUNT="$burn_amount" \
+      VITE_DEV_API="http://127.0.0.1:$worker_port" VITE_DEV_WALLET_KEY="$(cast wallet private-key "$mnemonic" 2)" \
+      pnpm --dir web run dev --port "$web_port" --strictPort
+  fi
+}
+
+down() {
+  local name
+  for name in web caffeinate runner worker router anvil; do
+    if running "$name"; then
+      stop_tree "$(cat "$pids/$name")"
+      echo "$name: stopped"
+    fi
+    rm -f "$pids/$name"
+  done
+}
+
+status() {
+  local name
+  for name in anvil router worker runner caffeinate web; do
+    if running "$name"; then
+      echo "$name: running (pid $(cat "$pids/$name"))"
+    else
+      echo "$name: stopped"
+    fi
+  done
+  if [ -x target/release/venin ] && [ -f "$home/data/manifest.json" ]; then
+    target/release/venin status --config "$config"
+  fi
+}
+
+case "${1:-}" in
+  up) up ;;
+  down) down ;;
+  status) status ;;
+  logs)
+    if [ -n "${2:-}" ]; then tail -n 100 -f "$logs/$2.log"; else tail -n 20 -f "$logs"/*.log; fi
+    ;;
+  *)
+    echo "usage: ./dev up | down | status | logs [name]" >&2
+    exit 2
+    ;;
+esac

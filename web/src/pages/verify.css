@@ -1,0 +1,169 @@
+/* verify and check-up: the verdict line both pages open with */
+.verdict {
+  margin: 0 0 18px;
+  padding: 16px 22px;
+  border-radius: 16px;
+  font: 600 17px / 1.4 var(--sans);
+  background: var(--plate);
+  box-shadow: inset 0 0 0 1px var(--rule);
+}
+.verdict.good {
+  background: var(--violet-wash);
+  color: var(--violet);
+}
+.verdict.bad {
+  background: var(--eosin-wash);
+  color: var(--eosin-deep);
+}
+.verdict.busy {
+  color: var(--dim);
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+  transform: none;
+}
+
+/* a finished step in place of its button: violet once the pass verified, eosin on a mismatch */
+.finished {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 20px;
+  border-radius: 999px;
+  font: 600 16px / 1 var(--sans);
+  color: var(--dim);
+  box-shadow: inset 0 0 0 1.5px var(--rule-strong);
+}
+.finished.small {
+  min-height: 36px;
+  margin-top: 18px;
+  padding: 0 16px;
+  font-size: 14px;
+}
+.finished.good {
+  background: var(--violet-wash);
+  color: var(--violet);
+  box-shadow: inset 0 0 0 1.5px var(--violet);
+}
+.finished.bad {
+  background: var(--eosin-wash);
+  color: var(--eosin-deep);
+  box-shadow: inset 0 0 0 1.5px var(--eosin);
+}
+.finished.good::before,
+.checks li::before {
+  content: "";
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background:
+    var(--violet)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.6 6.3l2.3 2.3 4.5-4.9' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 12px no-repeat;
+}
+
+.verify-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+/* The checks that ran and passed, each with its count from the core's report; the rows share the card's height. */
+.checks-sheet {
+  display: flex;
+  flex-direction: column;
+}
+.checks {
+  display: grid;
+  flex: 1;
+  grid-auto-rows: 1fr;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--rule);
+}
+.checks li {
+  position: relative;
+  align-content: center;
+  padding: 14px 0 14px 34px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--dim);
+  font-size: 15px;
+}
+.checks li::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  margin-top: -10px;
+}
+.checks b {
+  color: var(--graphite);
+  font: 700 19px / 1 var(--display);
+}
+.verify-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.verify-table th,
+.verify-table td {
+  padding: 9px 8px;
+  text-align: right;
+  border-bottom: 1px solid var(--rule);
+  font-size: 15px;
+}
+.verify-table th:first-child {
+  text-align: left;
+}
+.verify-table thead th {
+  font: 500 11px var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.scope-note {
+  margin-bottom: 14px;
+}
+.verify-page .mismatches {
+  display: grid;
+  gap: 8px;
+  padding-left: 20px;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--eosin-deep);
+  overflow-wrap: anywhere;
+}
+.verify-page .pairs dd.mono {
+  overflow-wrap: anywhere;
+}
+.chain-state {
+  min-height: 1.5em;
+  margin-top: 10px;
+  font-size: 11px;
+}
+/* The caveats at a reading measure. */
+.limits {
+  max-width: 68ch;
+  margin-top: 30px;
+  color: var(--dim);
+  font-size: 15px;
+}
+
+@media (max-width: 760px) {
+  .verify-grid {
+    grid-template-columns: 1fr;
+  }
+  .verify-table th,
+  .verify-table td {
+    padding: 8px 4px;
+    font-size: 13px;
+  }
+  .verify-table thead th {
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+  }
+}

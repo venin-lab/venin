@@ -1,0 +1,29 @@
+{
+  "name": "venin-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/wasm.mjs && vite",
+    "build": "node scripts/wasm.mjs && vite build",
+    "check": "node scripts/wasm.mjs && tsc --noEmit && biome check . && vitest run",
+    "shots": "node scripts/wasm.mjs && node scripts/shots.mjs",
+    "fps": "node scripts/fps.mjs"
+  },
+  "dependencies": {
+    "@reown/appkit": "1.8.24",
+    "@reown/appkit-adapter-wagmi": "1.8.24",
+    "@wagmi/core": "3.6.9",
+    "preact": "11.2.0",
+    "three": "0.187.0",
+    "viem": "2.57.17"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.6",
+    "@types/node": "24.10.1",
+    "@types/three": "0.187.0",
+    "playwright-core": "1.65.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.7",
+    "vitest": "5.1.0"
+  }
+}

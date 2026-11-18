@@ -1,0 +1,384 @@
+/* /release: the specimen plate for the test and remix boxes, the night field for the burn */
+/* Payloads, templates and hex are shown exactly as written, never in the mono label case. */
+.release-page .rel-text,
+.release-page .rel-template,
+.release-page .rel-strain .dim,
+.release-page .rel-tx dd,
+.release-page .rel-hash,
+.release-page .rel-verdict .strong,
+.release-page .ph-btn {
+  text-transform: none;
+  letter-spacing: 0;
+}
+.release-page .page-head {
+  max-width: 980px;
+}
+/* The two boxes end on one line: the shorter one gives its extra height to the payload or the template. */
+.rel-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 20px;
+}
+.rel-text,
+.rel-strain {
+  flex: 1 0 auto;
+}
+.rel-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding: 26px;
+  border-radius: 20px;
+  background: var(--plate);
+  box-shadow: inset 0 0 0 1px var(--rule);
+}
+.rel-panel h2,
+.rel-list h2 {
+  font-size: clamp(22px, 2vw, 30px);
+}
+.rel-routes {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.rel-route {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--rule);
+  color: var(--graphite);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.rel-route b {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+.rel-route.on {
+  background: var(--eosin-wash);
+  box-shadow: inset 0 0 0 2px var(--eosin);
+}
+.rel-route:focus-visible,
+.ph-btn:focus-visible,
+.rel-pick:focus-visible {
+  outline: 2px solid var(--violet);
+  outline-offset: 2px;
+}
+.rel-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.rel-label .near {
+  color: var(--eosin-deep);
+}
+.rel-text {
+  width: 100%;
+  min-height: 150px;
+  padding: 14px;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--rule-strong);
+  color: var(--graphite);
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+}
+.rel-text:focus {
+  outline: 2px solid var(--violet);
+}
+.rel-ph {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.rel-ph .dim {
+  font-size: 11px;
+  color: var(--dim);
+}
+.ph-btn {
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--eosin-wash);
+  color: var(--eosin-deep);
+  font-size: 12px;
+  cursor: pointer;
+}
+.rel-verdict {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 15px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--rule);
+}
+.rel-verdict b {
+  margin-right: 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+/* The gate's answer, outlined whole in its colour like the calls on a patient's page: violet passes, eosin refuses. */
+.rel-verdict.ok {
+  box-shadow: inset 0 0 0 1.5px var(--violet);
+}
+.rel-verdict.ok b {
+  color: var(--violet);
+}
+.rel-verdict.no {
+  box-shadow: inset 0 0 0 1.5px var(--eosin);
+}
+.rel-verdict.no b {
+  color: var(--eosin-deep);
+}
+.rel-verdict.wait {
+  box-shadow: inset 0 0 0 1.5px var(--steel);
+}
+.rel-verdict .strong {
+  font-weight: 600;
+}
+/* The strain to remix: one native list, grouped by organ, styled as the other white fields. */
+.rel-pick {
+  width: 100%;
+  min-height: 46px;
+  margin-top: -6px;
+  padding: 0 40px 0 14px;
+  border: 0;
+  border-radius: 12px;
+  background:
+    #fff
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%231e2026' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    right 16px center / 12px no-repeat;
+  box-shadow: inset 0 0 0 1px var(--rule-strong);
+  color: var(--graphite);
+  font: 500 15px var(--sans);
+  appearance: none;
+  cursor: pointer;
+}
+.rel-strain {
+  padding: 14px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--rule);
+}
+.rel-strain .dim {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--dim);
+  overflow-wrap: anywhere;
+}
+.rel-template {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+/* Disguises in rows by family, each row's name in a column of its own. */
+.rel-ops {
+  display: grid;
+  gap: 8px;
+  margin-top: -4px;
+}
+.rel-family {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 10px;
+}
+.rel-family .dim {
+  font-size: 11px;
+}
+.rel-family > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.rel-note {
+  margin: 0;
+  color: var(--dim);
+  font-size: 14px;
+}
+.rel-panel > .btn {
+  align-self: flex-start;
+}
+/* The night field, flat: the attacker's side reads by its ground, not by a glow. */
+.rel-burn {
+  margin-top: 20px;
+  background: var(--night);
+  box-shadow: none;
+  color: var(--paper);
+}
+.rel-burn .kicker {
+  color: rgba(236, 235, 232, 0.62);
+}
+.rel-burn .rel-note {
+  max-width: 860px;
+  color: rgba(236, 235, 232, 0.75);
+}
+.rel-closed {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(236, 235, 232, 0.85);
+}
+.rel-closed b {
+  color: #ff7aa8;
+  font-weight: 600;
+}
+.rel-burn > .btn,
+.rel-dev > .btn {
+  align-self: flex-start;
+}
+.rel-dev {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  border-radius: 16px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+.rel-tx {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 18px;
+  margin: 0;
+  font-size: 12px;
+}
+.rel-tx dt {
+  color: rgba(236, 235, 232, 0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.rel-tx dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.rel-tx .rel-data {
+  color: rgba(236, 235, 232, 0.7);
+}
+.rel-steps {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+.rel-steps li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: rgba(236, 235, 232, 0.45);
+}
+.rel-steps li.done {
+  color: var(--paper);
+}
+.rel-steps li.done::before {
+  content: "+";
+  color: #ff7aa8;
+}
+.rel-steps li.fail {
+  color: #ff7aa8;
+}
+.rel-hash {
+  min-width: 0;
+  color: rgba(236, 235, 232, 0.6);
+  overflow-wrap: anywhere;
+}
+.rel-list {
+  margin-top: 56px;
+  max-width: 980px;
+}
+.rel-empty {
+  margin-top: 16px;
+  padding: 18px 20px;
+  border-radius: 16px;
+  outline: 1px dashed var(--rule-strong);
+  outline-offset: -1px;
+  color: var(--dim);
+}
+.rel-item {
+  margin-top: 16px;
+  padding: 18px 20px;
+  border-radius: 16px;
+  background: var(--plate);
+  box-shadow: inset 0 0 0 1px var(--rule);
+}
+.rel-item .dim {
+  margin: 0;
+  font-size: 11px;
+  color: var(--dim);
+}
+.rel-status.run {
+  color: var(--violet);
+}
+.rel-status.gate,
+.rel-status.chain,
+.rel-status.burn_not_found {
+  color: var(--eosin-deep);
+}
+.rel-unmod {
+  margin: 12px 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--steel);
+}
+.rel-payload {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.rel-withheld {
+  margin: 0;
+  color: var(--dim);
+}
+
+@media (max-width: 980px) {
+  .rel-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 760px) {
+  /* 16px keeps a phone from zooming the page when the box takes focus. */
+  .rel-text {
+    font-size: 16px;
+  }
+}
+@media (max-width: 560px) {
+  .rel-panel {
+    padding: 18px;
+  }
+  .rel-family {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .rel-routes {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .rel-tx {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+  .rel-tx dd {
+    margin-bottom: 6px;
+  }
+}

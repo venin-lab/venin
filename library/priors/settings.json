@@ -1,0 +1,42 @@
+{
+  "version": "0.20.0",
+  "source": "README.md of @priors/mcp 0.20.0: the ElizaOS block under \"An agent that runs on its own\", and the settings table",
+  "note": "PRIORS_PAY_HOSTS names the sandbox merchants of library/tasks.jsonl in place of the README's api.example.com; unset, pay_url pays every host.",
+  "env": [
+    {
+      "name": "PRIORS_AGENT_ID",
+      "value": "7311",
+      "doc": "env: { PRIORS_KEY_FILE: \"/home/agent/.config/priors/agent-7311.key\", PRIORS_AGENT_ID: \"7311\","
+    },
+    {
+      "name": "PRIORS_MAX_BORROW_USD",
+      "value": "0",
+      "doc": "PRIORS_MAX_BORROW_USD: \"0\", PRIORS_MAX_BORROW_DAY_USD: \"0\", PRIORS_MAX_SPEND_DAY_USD: \"1\", PRIORS_MAX_PRICE_USD: \"0.10\","
+    },
+    {
+      "name": "PRIORS_MAX_BORROW_DAY_USD",
+      "value": "0",
+      "doc": "PRIORS_MAX_BORROW_USD: \"0\", PRIORS_MAX_BORROW_DAY_USD: \"0\", PRIORS_MAX_SPEND_DAY_USD: \"1\", PRIORS_MAX_PRICE_USD: \"0.10\","
+    },
+    {
+      "name": "PRIORS_MAX_SPEND_DAY_USD",
+      "value": "1",
+      "doc": "PRIORS_MAX_BORROW_USD: \"0\", PRIORS_MAX_BORROW_DAY_USD: \"0\", PRIORS_MAX_SPEND_DAY_USD: \"1\", PRIORS_MAX_PRICE_USD: \"0.10\","
+    },
+    {
+      "name": "PRIORS_MAX_PRICE_USD",
+      "value": "0.10",
+      "doc": "PRIORS_MAX_BORROW_USD: \"0\", PRIORS_MAX_BORROW_DAY_USD: \"0\", PRIORS_MAX_SPEND_DAY_USD: \"1\", PRIORS_MAX_PRICE_USD: \"0.10\","
+    },
+    {
+      "name": "PRIORS_MAX_SPEND_USD",
+      "value": "5",
+      "doc": "| `PRIORS_MAX_SPEND_USD` | `5` | most `pay_url` (with `pay_gateway`) may sign in total while the server runs (counted when signed) |"
+    },
+    {
+      "name": "PRIORS_PAY_HOSTS",
+      "value": "api.tidewater-data.invalid, quotes.harbor-fx.invalid, feeds.lumen-wire.invalid",
+      "doc": "PRIORS_PAY_HOSTS: \"api.example.com\" } }"
+    }
+  ]
+}

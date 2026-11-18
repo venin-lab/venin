@@ -1,0 +1,160 @@
+#!/usr/bin/env bash
+# Repository rules: printable ASCII, no agent files, no secrets, no credit lines, no leftover markers, clean metadata.
+# Usage: scripts/check [tree|staged|history [rev...]|blobs [rev...]|names <name>...|artifacts <dir>|msg <file>]
+# history and blobs cover the commits given (the pre-push hook gives what a push sends), else HEAD, branches and tags.
+set -uo pipefail
+cd "$(git rev-parse --show-toplevel)"
+# A push sends the original objects, so a replacement must not hide one from these checks.
+export GIT_NO_REPLACE_OBJECTS=1
+mode="${1:-tree}"
+fail=0
+err() { printf 'check: %s\n' "$*" >&2; fail=1; }
+
+export CREDIT_RE='co-authored-by|(generated|written|made|built) (with|by|using) .{0,24}\b(claude|anthropic|chatgpt|openai|gpt|copilot|codex|ai|llm)\b|assisted by|noreply\@anthropic'
+export MESSAGE_RE="$CREDIT_RE"'|anthropic|\bclaude\b|\bcodex\b|\bcopilot\b'
+export SECRET_RE='sk-or-v1-[0-9a-f]{64}|-----BEGIN [A-Z ]*PRIVATE|\b(hf|npm)_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{20,}|gho_[A-Za-z0-9]{30,}|(?-i:AKIA[0-9A-Z]{16})|[A-Z_]*(KEY|PK|SECRET)[A-Z_]*[ \t]*[=:][ \t]*["'"'"']?0x[0-9a-fA-F]{64}'
+export MARKER_RE='\b(TO''DO|FIX''ME)\b'
+denylist="$HOME/.config/venin/denylist"
+# The denylist's words, trimmed, matched whole and in any case; empty without a list or without a word in it.
+DENY_RE="$(perl -ne 's/^\s+|\s+\z//g; print quotemeta(lc), "|" if length' "$denylist" 2>/dev/null)"
+[ -z "$DENY_RE" ] || DENY_RE="\\b(?:${DENY_RE%|})\\b"
+export DENY_RE
+export BINARY_RE='\.(png|jpe?g|webp|ico|gz|bin|wasm|woff2?|ttf|otf|glb)$'
+
+list_files() {
+  if [ "$mode" = staged ]; then git diff --cached --name-only --diff-filter=ACMR; else git ls-files; fi
+}
+
+read_file() {
+  if [ "$mode" = staged ]; then git show ":$1"; else cat -- "$1"; fi
+}
+
+# Prints the first line number of $1 matching the Perl regex held in the environment variable named $2.
+first_match() {
+  read_file "$1" | PAT_NAME="$2" perl -ne 'BEGIN { $p = $ENV{$ENV{PAT_NAME}} } if (/$p/i) { print $.; exit }'
+}
+
+is_binary() {
+  [[ $1 =~ $BINARY_RE ]]
+}
+
+check_files() {
+  local f line
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    case "$f" in
+      AGENTS.md|*/AGENTS.md|CLAUDE.md|*/CLAUDE.md|.claude/*|*/.claude/*|.env*|*/.env*|*.pem|*.key|\
+      .dev.vars*|*/.dev.vars*)
+        err "$f: this file must not be tracked" ;;
+    esac
+    if [ -n "$DENY_RE" ] && printf '%s\n' "$f" | perl -ne 'exit !/$ENV{DENY_RE}/i'; then
+      err "$f: denylisted word in the file name"
+    fi
+    is_binary "$f" && continue
+    line="$(read_file "$f" | perl -ne 'if (/[^\x20-\x7E\n]/) { print $.; exit }')"
+    [ -z "$line" ] || err "$f:$line: non-ASCII, tab or carriage return"
+    [ "$f" = scripts/check ] && continue
+    line="$(first_match "$f" MARKER_RE)"; [ -z "$line" ] || err "$f:$line: leftover marker"
+    line="$(first_match "$f" CREDIT_RE)"; [ -z "$line" ] || err "$f:$line: credit line"
+    line="$(first_match "$f" SECRET_RE)"; [ -z "$line" ] || err "$f:$line: looks like a secret"
+    if [ -n "$DENY_RE" ]; then
+      line="$(first_match "$f" DENY_RE)"; [ -z "$line" ] || err "$f:$line: denylisted word"
+    fi
+  done < <(list_files)
+}
+
+# Commits and annotated tags carry names, emails and times as well as messages.
+check_history() {
+  local bad
+  [ $# -gt 0 ] || set -- HEAD --branches --tags
+  # The identity rule is for what this repository pushes; a pull request's commits carry their authors' names.
+  if [ "${GITHUB_EVENT_NAME:-}" != pull_request ]; then
+    bad="$(git -c log.showSignature=false log --format='%H|%an|%ae|%cn|%ce|%ai|%ci' "$@" -- | perl -F'\|' -lane '
+      print $F[0] unless $F[1] eq "venin-lab" && $F[3] eq "venin-lab"
+        && $F[2] =~ /^(\d+\+)?venin-lab\@users\.noreply\.github\.com$/
+        && $F[4] =~ /^(\d+\+)?venin-lab\@users\.noreply\.github\.com$/
+        && $F[5] =~ / \+0000$/ && $F[6] =~ / \+0000$/')" || err "history: git could not list the commits"
+    [ -z "$bad" ] || err "commits with the wrong identity or time zone: $(echo "$bad" | tr '\n' ' ')"
+    bad="$(git for-each-ref refs/tags \
+      --format='%(objecttype)|%(refname:short)|%(taggername)|%(taggeremail)|%(taggerdate:iso)' | perl -F'\|' -lane '
+      print $F[1] if $F[0] eq "tag" && !($F[2] eq "venin-lab"
+        && $F[3] =~ /^<(\d+\+)?venin-lab\@users\.noreply\.github\.com>$/ && $F[4] =~ / \+0000$/)')" \
+      || err "history: git could not list the tags"
+    [ -z "$bad" ] || err "tags with the wrong identity or time zone: $(echo "$bad" | tr '\n' ' ')"
+  fi
+  bad="$(git -c log.showSignature=false log --format='%H%n%B' "$@" -- | perl -ne '
+    BEGIN { ($p, $s, $d) = @ENV{qw(MESSAGE_RE SECRET_RE DENY_RE)} } if (/^([0-9a-f]{40})$/) { $h = $1; next }
+    print "$h\n" if /$p/i || /$s/i || (length $d && /$d/i)')" || err "history: git could not read the messages"
+  [ -z "$bad" ] || err "commit messages with a credit line, secret or denylisted word:" $(echo "$bad" | sort -u)
+}
+
+# Every object the commits reach: a push publishes them all, so a secret, credit line or denylisted word in an old file,
+# a file or folder name, a commit or a tag leaks as surely as one in the tree. Binary files and this script are not
+# read; folders are read for the names they hold.
+check_blobs() {
+  local bad
+  [ $# -gt 0 ] || set -- HEAD --branches --tags
+  bad="$(git rev-list --objects "$@" -- \
+    | git cat-file --batch='%(objecttype) %(objectname) %(objectsize) %(rest)' \
+    | perl -e '
+      my %re = ("credit line" => $ENV{CREDIT_RE}, "secret" => $ENV{SECRET_RE});
+      $re{"denylisted word"} = $ENV{DENY_RE} if length $ENV{DENY_RE};
+      while (my $head = <STDIN>) {
+        my ($type, $id, $size, $path) = $head =~ /^(\S+) (\S+) (\d+) ?(.*)$/ or die "check: cat-file said $head";
+        read(STDIN, my $body, $size) == $size or die "check: cat-file ended early\n";
+        <STDIN>;
+        my $where = length $path ? $path : "$type $id";
+        if ($type eq "tree") {
+          while (length $ENV{DENY_RE} && $body =~ /\G[0-7]+ ([^\0]*)\0.{20}/gs) {
+            my $name = $1;
+            print "$where/$name (denylisted name)\n" if $name =~ /$ENV{DENY_RE}/i;
+          }
+          next;
+        }
+        next if $type eq "blob" && ($path eq "scripts/check" || $path =~ /$ENV{BINARY_RE}/);
+        my %use = %re;
+        $use{"credit line"} = $ENV{MESSAGE_RE} if $type ne "blob";
+        for my $what (sort keys %use) { print "$where ($what)\n" if $body =~ /$use{$what}/i }
+      }')" || err "blobs: could not read every object"
+  [ -z "$bad" ] || err "history holds what must not be published: $(echo "$bad" | sort -u | tr '\n' ' ')"
+}
+
+# Names a push publishes as they are, such as the branches and tags it creates.
+check_names() {
+  local bad
+  [ -n "$DENY_RE" ] || return 0
+  bad="$(printf '%s\n' "$@" | perl -ne 'print if /$ENV{DENY_RE}/i')"
+  [ -z "$bad" ] || err "names with a denylisted word: $(echo "$bad" | tr '\n' ' ')"
+}
+
+# What the commit-msg hook is given, before git strips comments: a verbose commit's diff below the scissors is not
+# part of the message.
+check_message() {
+  local line
+  line="$(perl -ne 'BEGIN { ($p, $s, $d) = @ENV{qw(MESSAGE_RE SECRET_RE DENY_RE)} }
+    last if /^# -+ >8 -+$/; next if /^#/;
+    if (/$p/i || /$s/i || (length $d && /$d/i)) { print $.; exit }' "$1")"
+  [ -z "$line" ] || err "commit message line $line has a credit line, a secret or a denylisted word"
+}
+
+check_artifacts() {
+  local dir="$1" host
+  host="$(hostname -s 2>/dev/null || true)"
+  if grep -rl --binary-files=text -e '/Users/' -e '/home/' "$dir" >/dev/null 2>&1; then
+    err "$dir: build output contains an absolute home path"
+  fi
+  if [ -n "$host" ] && grep -rl --binary-files=text -F "$host" "$dir" >/dev/null 2>&1; then
+    err "$dir: build output contains this machine's host name"
+  fi
+}
+
+case "$mode" in
+  tree|staged) check_files ;;
+  history) shift; check_history "$@" ;;
+  blobs) shift; check_blobs "$@" ;;
+  names) shift; check_names "$@" ;;
+  msg) check_message "$2" ;;
+  artifacts) check_artifacts "$2" ;;
+  *) err "unknown mode: $mode" ;;
+esac
+exit "$fail"

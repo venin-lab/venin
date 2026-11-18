@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Commits with the repo's identity and a UTC timestamp. Use instead of `git commit`.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+TZ=UTC git -c user.name=venin-lab -c user.email=358009060+venin-lab@users.noreply.github.com commit "$@"

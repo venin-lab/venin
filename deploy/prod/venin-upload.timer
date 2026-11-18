@@ -1,0 +1,12 @@
+# Runs venin-upload.service every minute: `systemctl enable --now venin-upload.timer`.
+
+[Unit]
+Description=Upload the Venin record every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

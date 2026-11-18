@@ -1,0 +1,22 @@
+[workspace]
+resolver = "3"
+members = ["crates/core", "crates/venin"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/venin-lab/venin"
+rust-version = "1.100"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused = { level = "deny", priority = -1 }
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = "s"

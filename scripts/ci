@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Everything CI runs, runnable locally.
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+. scripts/env
+rustc --version | grep -q '^rustc 1\.100\.' || { echo "ci: expected rustc 1.100" >&2; exit 1; }
+scripts/check tree
+scripts/check history
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+cargo build -p venin-core --release --target wasm32-unknown-unknown
+node --test harness/priors/priors.test.mjs
+if [ -f pnpm-workspace.yaml ]; then
+  pnpm install --frozen-lockfile
+  pnpm -r run check
+fi

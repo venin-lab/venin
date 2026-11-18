@@ -1,0 +1,12 @@
+/target/
+node_modules/
+dist/
+.wrangler/
+*.log
+.env*
+.dev.vars*
+/data/
+/web/src/wasm/
+.DS_Store
+/deploy/dev/token/out/
+/deploy/dev/token/cache/

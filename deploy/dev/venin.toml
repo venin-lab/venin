@@ -1,0 +1,95 @@
+# The dev league: four local models behind the llama-server router, the draw from Robinhood Chain (read only) and the
+# anchors on a local anvil chain. Paths starting with ~/ are under the home directory; relative paths are taken from
+# the repository root, where ./dev starts the runner.
+
+league = "local league"
+data_dir = "~/Documents/venin-dev/data"
+state_dir = "~/Documents/venin-dev/state"
+library_dir = "library"
+period_s = 3600
+deadline_s = 3000
+late_s = 300
+k = 8
+exam_draw_delay_s = 60
+call_timeout_s = 180
+llama_server = "llama-server"
+card_script = "web/scripts/card.mjs"
+ntfy_topic = ""
+
+# Model work waits while free memory is under min_free_percent. A machine that also runs another service names it in
+# reader_file (url, time_key, fresh_s), outside the repository; model work then also waits while that service answers
+# slowly or reports an old time. Without the file the check reads memory only.
+[host_check]
+enabled = true
+min_free_percent = 20
+reader_file = "~/Documents/venin-dev/host-reader.toml"
+
+[draw]
+chain_id = 4663
+rpcs = ["https://robinhood.daybreak-rpc.network", "https://rpc.mainnet.chain.robinhood.com"]
+
+[anchor]
+chain_id = 31337
+rpcs = ["http://127.0.0.1:8546"]
+key_file = "~/Documents/venin-dev/anchor.key"
+gas_limit_max = 40000
+max_fee_per_gas_max = "100000000000"
+daily_cap_wei = "100000000000000000"
+
+# The holder intake: the local Worker (`wrangler dev`, started by ./dev) and the dev token on the local anvil. The dev
+# league takes no holder strains (slots = 0); a release test runs its own copy with slots up to 6.
+[release]
+queue_url = "http://127.0.0.1:8787/api/queue"
+slots = 0
+chain_id = 31337
+token = "0x8464135c8F25Da09e49BC8782676a84730C318bC"
+amount = "1000000000000000000000"
+rpcs = ["http://127.0.0.1:8546"]
+
+# Ministral 3 3B, by Mistral.
+[[models]]
+column = "m1"
+id = "Ministral-3-3B-Instruct-2512-Q4_K_M"
+label = "Ministral 3 3B"
+served_by = "llama-server router, this machine"
+endpoint = "http://127.0.0.1:8090/v1"
+concurrency = 2
+gguf = "~/Documents/venin-dev/models/Ministral-3-3B-Instruct-2512-Q4_K_M.gguf"
+price_micro_per_mtok = { prompt = 0, completion = 0 }
+sampling = { temperature_milli = 700, top_p_milli = 950, top_k = 40, max_tokens = 1024 }
+
+# Qwen3.5 4B, by Alibaba.
+[[models]]
+column = "m2"
+id = "Qwen3.5-4B-Q4_K_M"
+label = "Qwen3.5 4B"
+served_by = "llama-server router, this machine"
+endpoint = "http://127.0.0.1:8090/v1"
+concurrency = 2
+gguf = "~/Documents/venin-dev/models/Qwen3.5-4B-Q4_K_M.gguf"
+price_micro_per_mtok = { prompt = 0, completion = 0 }
+sampling = { temperature_milli = 700, top_p_milli = 950, top_k = 40, max_tokens = 1024 }
+
+# Granite 4.2 3B, by IBM.
+[[models]]
+column = "m3"
+id = "granite-4.2-3b-Q4_K_M"
+label = "Granite 4.2 3B"
+served_by = "llama-server router, this machine"
+endpoint = "http://127.0.0.1:8090/v1"
+concurrency = 2
+gguf = "~/Documents/venin-dev/models/granite-4.2-3b-Q4_K_M.gguf"
+price_micro_per_mtok = { prompt = 0, completion = 0 }
+sampling = { temperature_milli = 700, top_p_milli = 950, top_k = 40, max_tokens = 1024 }
+
+# Gemma 4 E4B, by Google.
+[[models]]
+column = "m4"
+id = "gemma-4-E4B-it-Q4_0"
+label = "Gemma 4 E4B"
+served_by = "llama-server router, this machine"
+endpoint = "http://127.0.0.1:8090/v1"
+concurrency = 2
+gguf = "~/Documents/venin-dev/models/gemma-4-E4B-it-Q4_0.gguf"
+price_micro_per_mtok = { prompt = 0, completion = 0 }
+sampling = { temperature_milli = 700, top_p_milli = 950, top_k = 40, max_tokens = 1024 }

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# A push publishes what the remote does not hold yet: the commits, tags and files it sends, and the names it sends them
+# under. Exactly those are checked, so a local branch that is never pushed cannot block a push.
+check="$(git rev-parse --show-toplevel)/scripts/check"
+sent=""
+names=""
+while read -r _ local_sha remote_ref _; do
+  case "$local_sha" in *[!0]*) sent="$sent $local_sha" ;; esac
+  names="$names $remote_ref"
+done
+[ -n "$sent" ] || exit 0
+# $1 is the remote's name (its URL when it has none); what its remote-tracking refs hold was sent before.
+# shellcheck disable=SC2086
+"$check" names $names && "$check" history $sent --not --remotes="$1" && exec "$check" blobs $sent --not --remotes="$1"

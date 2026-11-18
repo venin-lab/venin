@@ -1,0 +1,115 @@
+# The production league: four hosted models through OpenRouter, each pinned to one provider with fallbacks and Armor
+# off, the draw and the anchors on Robinhood Chain (4663), on a VPS under deploy/prod/venin.service. The runner starts
+# in /opt/venin, a checkout of the tagged release; relative paths are taken from there.
+#
+# Off until the owner approves each, on the launch checklist:
+# - the anchor: no key file exists at anchor.key_file until the automated anchor is approved, and the runner refuses
+#   to start without it;
+# - the holder intake: no [release] section until launch; `venin launch set-ca` then needs one naming the token;
+# - the hourly post: VENIN_X_POST=on in /etc/venin/post.env, after the captions are approved.
+# Secrets come from the environment (/etc/venin/env): VENIN_OPENROUTER_KEY, and VENIN_QUEUE_TOKEN once [release] is on.
+
+league = "production league"
+data_dir = "/var/lib/venin/data"
+state_dir = "/var/lib/venin/state"
+library_dir = "library"
+period_s = 3600
+deadline_s = 3000
+late_s = 900
+k = 8
+exam_draw_delay_s = 3600
+call_timeout_s = 120
+card_script = "web/scripts/card.mjs"
+# Alerts: a topic with a long random name, given on the VPS as VENIN_NTFY_TOPIC in /etc/venin/env, upload.env and
+# post.env, never here; with neither, no alerts are sent.
+ntfy_topic = ""
+
+# The record's public bucket, filled by `venin upload` from deploy/prod/venin-upload.timer. Its endpoint and keys live
+# in /etc/venin/upload.env: VENIN_R2_ENDPOINT (https://<account id>.r2.cloudflarestorage.com), VENIN_R2_KEY_ID and
+# VENIN_R2_SECRET, from an R2 token with object read and write on this bucket only.
+[upload]
+bucket = "venin-record"
+
+# The hourly post, by `venin post` from deploy/prod/venin-post.timer, as the account whose keys are in
+# /etc/venin/post.env: VENIN_X_CONSUMER_KEY, VENIN_X_CONSUMER_SECRET, VENIN_X_TOKEN and VENIN_X_TOKEN_SECRET. Off
+# until the owner approves the captions and VENIN_X_POST=on is added there; off, a run shows what it would post.
+[post]
+
+# The host check reads macOS memory pressure, for a machine the lab shares; a VPS runs only the lab.
+[host_check]
+enabled = false
+min_free_percent = 20
+
+[draw]
+chain_id = 4663
+rpcs = ["https://robinhood.daybreak-rpc.network", "https://rpc.mainnet.chain.robinhood.com"]
+
+# Measured 16 Nov 2026: 21,814 gas at 0.020 gwei per anchor. The caps leave room for fee spikes: 1 gwei at most, and
+# 0.0005 ETH in any 24 hours.
+[anchor]
+chain_id = 4663
+rpcs = ["https://robinhood.daybreak-rpc.network", "https://rpc.mainnet.chain.robinhood.com"]
+key_file = "/etc/venin/anchor.key"
+gas_limit_max = 40000
+max_fee_per_gas_max = "1000000000"
+daily_cap_wei = "500000000000000"
+
+# $2.50 a day: each period may spend a 24th of it plus what earlier periods left, up to one day's cap.
+[budget]
+daily_cap_micro = 2500000
+
+# Ids, providers and prices as OpenRouter listed them on 17 Nov 2026 (api/v1/models/<id>/endpoints), checked again on
+# 18 Nov with one paid tool call per model (each served by its pinned provider, no safeguard result); check them again
+# at genesis. The comment above each model names the dated version its id served then. Prices are micro-USD per
+# million tokens for the pinned provider's endpoint.
+
+# DeepSeek V4.1 Flash (deepseek-v4.1-flash-20261017), open weights served by a third-party host, never DeepSeek's
+# own API. DeepInfra also lists flex and priority endpoints at other prices; the fp8 one is priced here.
+[[models]]
+column = "m1"
+id = "deepseek/deepseek-v4.1-flash-1017"
+label = "DeepSeek V4.1 Flash"
+served_by = "OpenRouter, provider DeepInfra"
+endpoint = "https://openrouter.ai/api/v1"
+concurrency = 4
+openrouter = { provider = "DeepInfra" }
+price_micro_per_mtok = { prompt = 98000, completion = 294000 }
+sampling = { temperature_milli = 700, top_p_milli = 950, top_k = 40, max_tokens = 1024 }
+
+# GPT-6 Luna (gpt-6-luna-20260922), by OpenAI.
+[[models]]
+column = "m2"
+id = "openai/gpt-6-luna"
+label = "GPT-6 Luna"
+served_by = "OpenRouter, provider OpenAI"
+endpoint = "https://openrouter.ai/api/v1"
+concurrency = 4
+openrouter = { provider = "OpenAI" }
+price_micro_per_mtok = { prompt = 100000, completion = 500000 }
+sampling = { temperature_milli = 700, top_p_milli = 950, top_k = 40, max_tokens = 1024 }
+
+# Qwen3.8 Flash (qwen3.8-flash-20260826), by Alibaba.
+[[models]]
+column = "m3"
+id = "qwen/qwen3.8-flash"
+label = "Qwen3.8 Flash"
+served_by = "OpenRouter, provider Alibaba"
+endpoint = "https://openrouter.ai/api/v1"
+concurrency = 4
+openrouter = { provider = "Alibaba" }
+price_micro_per_mtok = { prompt = 150000, completion = 470000 }
+sampling = { temperature_milli = 700, top_p_milli = 950, top_k = 40, max_tokens = 1024 }
+
+# MiniMax M3.1 Flash (minimax-m3.1-flash-20261019), by MiniMax; OpenRouter names the provider Minimax. Minimax
+# charges by the clock: the price below from 01:00 to 15:00 UTC and half of it from 15:00 to 01:00 (seen 18 Nov; the
+# 17 Nov check fell in the cheap half). The full price is used, so the budget never spends past its cap.
+[[models]]
+column = "m4"
+id = "minimax/minimax-m3.1-flash"
+label = "MiniMax M3.1 Flash"
+served_by = "OpenRouter, provider Minimax"
+endpoint = "https://openrouter.ai/api/v1"
+concurrency = 4
+openrouter = { provider = "Minimax" }
+price_micro_per_mtok = { prompt = 150000, completion = 600000 }
+sampling = { temperature_milli = 700, top_p_milli = 950, top_k = 40, max_tokens = 1024 }

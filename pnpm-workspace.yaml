@@ -1,0 +1,6 @@
+packages:
+  - web
+  - worker
+minimumReleaseAge: 10080
+ignoreScripts: true
+saveExact: true

@@ -1,0 +1,9 @@
+# Sourced by the repo's scripts. Puts rustup's toolchain ahead of any system Rust and fixes build paths and time zone.
+root="$(git rev-parse --show-toplevel)"
+if command -v brew >/dev/null 2>&1 && [ -d "$(brew --prefix rustup 2>/dev/null)/bin" ]; then
+  PATH="$(brew --prefix rustup)/bin:$PATH"
+fi
+PATH="$HOME/.cargo/bin:$PATH"
+export PATH
+export RUSTFLAGS="--remap-path-prefix=$HOME=~ --remap-path-prefix=$root=."
+export TZ=UTC
