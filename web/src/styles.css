@@ -1903,6 +1903,33 @@ a:focus-visible {
 .release p.token-line {
   margin-top: 22px;
 }
+/* The coin under the headline: the whole contract, copyable, on the ward's page. */
+.hero-main p.token-line {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 16px;
+  padding: 7px 8px 7px 12px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 8px;
+  font-size: clamp(10px, 2.9vw, 12px);
+}
+.hero-main .token-line > span:first-child {
+  flex-basis: auto;
+  color: var(--dim);
+}
+/* A phone: the coin and Copy on one line, the contract on the next, so the button never sits alone. */
+@media (max-width: 760px) {
+  .hero-main p.token-line {
+    display: flex;
+    justify-content: space-between;
+  }
+  .hero-main .token-line > span:nth-child(2) {
+    order: 3;
+    flex-basis: 100%;
+  }
+}
 .token-line > span:first-child {
   flex-basis: 100%;
 }

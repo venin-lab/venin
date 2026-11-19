@@ -3,6 +3,7 @@ import type { Lab } from "../record/load";
 import { type BodyState, findStrain, focal, heldBy, noun, ROW_LABEL, ROWS } from "../record/stats";
 import type { HourRecord, Manifest, Row } from "../record/types";
 import { hourState } from "../record/views";
+import { TokenLine } from "./sections";
 import { type Anatomy, buildCloud, type Cloud, loadAnatomy } from "../three/anatomy";
 import { warmBody } from "../three/body";
 import { reachTime } from "../three/ink";
@@ -390,6 +391,7 @@ export function Hero({ agents, line, idle = false }: { agents: number; line: str
             </button>
           </span>
         </p>
+        <TokenLine />
       </div>
       <div class="hero-side">
         <p class="live mono">
