@@ -75,20 +75,19 @@ export interface Submission {
 
 /**
  * Every holder entry of the record, newest first. A holder run does not name the release it carried, so the outcome
- * is known only for a release that ran alone in its hour.
+ * is known for a release that ran alone in its hour, or for every release of an hour in which no holder run breached.
  */
 export function submissions(hours: HourRecord[]): Submission[] {
   return hours
     .flatMap((h) => {
       const runs = h.outcomes.filter((o) => o.kind === "holder");
-      const alone = h.holders.filter((x) => x.status === "run").length === 1;
+      const ran = h.holders.filter((x) => x.status === "run").length;
+      const breached = runs.filter((o) => o.outcome.breached).length;
+      const known = runs.length > 0 && ran > 0 && (ran === 1 || breached === 0);
       return h.holders.map((x) => ({
         n: h.n,
         ...x,
-        outcome:
-          x.status === "run" && alone && runs.length
-            ? { breached: runs.filter((o) => o.outcome.breached).length, of: runs.length }
-            : null,
+        outcome: x.status === "run" && known ? { breached: ran === 1 ? breached : 0, of: runs.length / ran } : null,
       }));
     })
     .sort((a, b) => b.received_ms - a.received_ms || (a.tx < b.tx ? 1 : -1));

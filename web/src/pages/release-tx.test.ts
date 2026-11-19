@@ -10,6 +10,10 @@ describe("submissions", () => {
     const h = { n: 27, holders: [holder("0xa")], outcomes: [run(false), run(true), { body: "m1-none", kind: "attack", outcome: { breached: true } }] };
     expect(submissions([h as unknown as HourRecord])[0].outcome).toEqual({ breached: 1, of: 2 });
   });
+  it("gives every release of an hour 0 when no holder run breached", () => {
+    const h = { n: 29, holders: [holder("0xa"), holder("0xb")], outcomes: [run(false), run(false), run(false), run(false)] };
+    expect(submissions([h as unknown as HourRecord]).map((s) => s.outcome)).toEqual([{ breached: 0, of: 2 }, { breached: 0, of: 2 }]);
+  });
   it("leaves the outcome unknown when two releases shared the hour, or one did not run", () => {
     const h = { n: 28, holders: [holder("0xa"), holder("0xb"), holder("0xc", "gate")], outcomes: [run(true)] };
     expect(submissions([h as unknown as HourRecord]).map((s) => s.outcome)).toEqual([null, null, null]);
