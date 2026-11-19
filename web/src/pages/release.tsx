@@ -276,7 +276,7 @@ const STEPS: [Step, string][] = [
   ["burn", "Burn sent"],
   ["mined", "Burn mined"],
   ["signed", "Release signed"],
-  ["queued", "Queued for the next hour"],
+  ["queued", "Queued: it runs in the next hour with a free slot"],
 ];
 
 function Progress({ done, error }: { done: Partial<Record<Step, string>>; error: string | null }) {
@@ -350,8 +350,9 @@ function Burn({ payload, route, ready, note }: { payload: string; route: Route; 
         Releasing burns {TICKER}, the lab's coin{launched ? ` on ${chainName(LAUNCH.chainId)}` : ""}: a plain transfer
         to the dead address, shown to you before you sign. Then you sign a short message naming the burn, the way in and
         your scam's fingerprint. Released strains run against the 8 Venin agents only, up to 6 an hour, first come first
-        served, on top of the hourly scam that hits all 20. One that gets through spreads under your wallet address and
-        stays on the record. No prizes, no payouts.
+        served, on top of the hourly scam that hits all 20. Exam hours, every fifth, take no releases, so a strain sent
+        before one waits an hour more. One that gets through spreads under your wallet address and stays on the record.
+        No prizes, no payouts.
       </p>
       {!launched && (
         <p class="rel-closed">
