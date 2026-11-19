@@ -60,6 +60,15 @@ daily_cap_wei = "500000000000000"
 [budget]
 daily_cap_micro = 5000000
 
+[release]
+# The launched coin; a release burns `amount` (100,000 VENIN) to the dead address before it is queued.
+queue_url = "https://venin.io/api/queue"
+slots = 6
+chain_id = 4663
+token = "0x8e75c1108190aA421C91865744fCdCD8B7Df753e"
+amount = "100000000000000000000000"
+rpcs = ["https://robinhood.daybreak-rpc.network", "https://rpc.mainnet.chain.robinhood.com"]
+
 # Ids, providers and prices as OpenRouter listed them on 17 Nov 2026 (api/v1/models/<id>/endpoints), checked again on
 # 18 Nov with one paid tool call per model (each served by its pinned provider, no safeguard result); check them again
 # at genesis. The comment above each model names the dated version its id served then. Prices are micro-USD per
