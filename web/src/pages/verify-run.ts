@@ -1,4 +1,4 @@
-import { DATA_URL, gunzipText, type Lab } from "../record/load";
+import { DATA_URL, gunzipText } from "../record/load";
 import type { Anchor, Manifest } from "../record/types";
 
 /** Periods replayed by default: the latest ones, then a few drawn at random from before them. */
@@ -51,8 +51,11 @@ export interface Library {
   names: string;
 }
 
-/** The record files and the library, byte for byte as the site serves them. */
-export async function readRecord(lab: Lab): Promise<{ records: Records; library: Library }> {
+/**
+ * The record files and the library, byte for byte as the site serves them. The hours are the ones the head read here
+ * names, not the page's: a page left open past an upload would pair the new anchors.json with its old hours.
+ */
+export async function readRecord(): Promise<{ records: Records; library: Library }> {
   const [manifest, exam, anchors, head, takedowns, strains, tasks, genes, rows, names] = await Promise.all([
     need("manifest.json"),
     need("exam.json"),
@@ -66,9 +69,10 @@ export async function readRecord(lab: Lab): Promise<{ records: Records; library:
     need("library/voc-names.txt"),
   ]);
   const hours: Record<string, string> = {};
-  const texts = await Promise.all(lab.hours.map((h) => need(`hours/${h.n}.json`)));
-  lab.hours.forEach((h, i) => {
-    hours[h.n] = texts[i];
+  const ns = Array.from({ length: (JSON.parse(head) as { n: number }).n + 1 }, (_, n) => n);
+  const texts = await Promise.all(ns.map((n) => need(`hours/${n}.json`)));
+  ns.forEach((n, i) => {
+    hours[n] = texts[i];
   });
   return {
     records: { manifest, exam, anchors, head, hours, takedowns: takedowns ? JSON.parse(takedowns) : [] },
@@ -222,6 +226,28 @@ export async function anchorFacts(
   }
   const nonce = quantity(await ask("eth_getTransactionCount", [manifest.anchor.address, "latest"]));
   return { nonce, txs, pending, absent };
+}
+
+/**
+ * The transaction count to hold `listed`, the anchors.json this pass verifies, to. The runner sends an hour's anchor
+ * a minute or so before it publishes the list naming it, so for that minute the address has sent more than `listed`
+ * holds. Then `now`, the list as published now, decides: when it starts with `listed` and names every transaction
+ * sent, the extra ones are newer anchors and `listed` is whole up to them. Otherwise the chain's count stands, so a
+ * transaction the lab never listed still fails the check.
+ */
+export function listedNonce(nonce: number, listed: Anchor[], now: Anchor[] | null): number {
+  if (nonce <= listed.length || now === null || now.length < nonce) return nonce;
+  return listed.every((a, i) => now[i]?.tx === a.tx) ? listed.length : nonce;
+}
+
+/** anchors.json as published this moment, past the browser's cached copy; null when it cannot be read. */
+export async function anchorsNow(): Promise<Anchor[] | null> {
+  try {
+    const res = await fetch(`${DATA_URL}/anchors.json`, { cache: "no-store" });
+    return res.ok ? ((await res.json()) as Anchor[]) : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

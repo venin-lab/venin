@@ -1,5 +1,5 @@
 import { Mark } from "./mark";
-import { TokenLine } from "./sections";
+import { REPO, TokenLine } from "./sections";
 
 const DATASETS = "LLMail-Inject, AgentDojo, InjecAgent, Agent Security Bench, deepset prompt-injections and garak";
 
@@ -29,6 +29,9 @@ export function Footer() {
       </div>
       <div class="credits">
         <TokenLine />
+        <p>
+          Code: <a href={REPO}>github.com/venin-lab/venin</a>, MIT licence: the runner, the verifier and this site.
+        </p>
         <p>
           Anatomy: BodyParts3D, (c) The Database Center for Life Science, licensed under CC Attribution 4.0
           International; point clouds sampled and modified by Venin.

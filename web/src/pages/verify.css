@@ -145,6 +145,18 @@
   margin-top: 10px;
   font-size: 11px;
 }
+/* Each claim beside its proof: two columns of pairs, one on a phone. */
+.claims {
+  margin-top: 18px;
+}
+.claims .pairs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 36px;
+}
+.claims code {
+  font: 0.9em var(--mono);
+  white-space: nowrap;
+}
 /* The caveats at a reading measure. */
 .limits {
   max-width: 68ch;
@@ -154,7 +166,8 @@
 }
 
 @media (max-width: 760px) {
-  .verify-grid {
+  .verify-grid,
+  .claims .pairs {
     grid-template-columns: 1fr;
   }
   .verify-table th,

@@ -2,8 +2,18 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Anchor, HourRecord, Manifest } from "../record/types";
 import { initSync, verify } from "../wasm/venin_core.js";
-import { headlineScope, hourList, leftOut, ranges, rebuiltHours } from "./verify";
-import { anchorFacts, anchorsIn, defaultScope, drawFact, drawFacts, RECENT, rpcList, SAMPLE } from "./verify-run";
+import { firstBirth, firstSelection, headlineScope, hourList, leftOut, ranges, rebuiltHours } from "./verify";
+import {
+  anchorFacts,
+  anchorsIn,
+  defaultScope,
+  drawFact,
+  drawFacts,
+  listedNonce,
+  RECENT,
+  rpcList,
+  SAMPLE,
+} from "./verify-run";
 import { answer, type Verified } from "./verify-wasm";
 
 const root = new URL("../../../", import.meta.url);
@@ -20,6 +30,25 @@ describe("scope", () => {
     expect(scope).toEqual([...scope].sort((a, b) => a - b));
     expect(defaultScope(5)).toEqual([0, 1, 2, 3, 4, 5]);
     expect(defaultScope(RECENT + 2, () => 0)).toEqual(Array.from({ length: RECENT + 3 }, (_, i) => i));
+  });
+
+  it("finds the first selection and the first strain that bred, for the claims list", () => {
+    const hour = (n: number, events: HourRecord["events"]) => ({ n, events }) as HourRecord;
+    const hours = [
+      hour(0, []),
+      hour(1, [
+        { type: "concern", strain: "SKL-3.0", name: "Krait" },
+        { type: "mutant", parent: "SKL-3.0", child: "SKL-3.1", operator: "encode_rot13" },
+      ]),
+      hour(2, [
+        { type: "replaced", column: "m1", incumbent: "a", challenger: "b", margin_ppm: 1, pairs: 9 },
+        { type: "kept", column: "m2", incumbent: "c", challenger: "d", margin_ppm: -1, pairs: 9 },
+      ]),
+    ];
+    expect(firstSelection(hours)).toEqual({ n: 2, replaced: 1 });
+    expect(firstBirth(hours)).toEqual({ n: 1, parent: "SKL-3.0", name: "Krait", child: "SKL-3.1" });
+    expect(firstSelection(hours.slice(0, 2))).toBeNull();
+    expect(firstBirth([hour(0, [])])).toBeNull();
   });
 
   it("writes hours as runs", () => {
@@ -181,6 +210,16 @@ describe("the chain", () => {
     });
     stub({ eth_chainId: "0x7a69", eth_getTransactionByHash: { blockNumber: null }, eth_getTransactionCount: "0x4" });
     expect((await anchorFacts(["http://x.example"], manifest, [anchor], () => {}, 0)).pending).toEqual(["0xt3"]);
+  });
+
+  it("lets anchors newer than the verified list account for the extra transactions, and nothing else", () => {
+    const a = (n: number, tx: string): Anchor => ({ kind: "hour", n, tx: tx as Anchor["tx"], block: n });
+    const listed = [a(0, "0xa"), a(1, "0xb")];
+    expect(listedNonce(2, listed, null)).toBe(2);
+    expect(listedNonce(3, listed, [...listed, a(2, "0xc")])).toBe(2);
+    expect(listedNonce(3, listed, listed)).toBe(3);
+    expect(listedNonce(3, listed, null)).toBe(3);
+    expect(listedNonce(3, listed, [a(0, "0xa"), a(1, "0xz"), a(2, "0xc")])).toBe(3);
   });
 
   it("refuses an RPC on another chain", async () => {

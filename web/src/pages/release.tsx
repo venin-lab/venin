@@ -3,7 +3,7 @@ import type { Lab } from "../record/load";
 import { OPERATOR_LABEL } from "../record/stats";
 import type { Route, Strain } from "../record/types";
 import { utc } from "../record/views";
-import { chainName, DOT, Placeholders, ROUTE_ORGAN } from "../ui/sections";
+import { chainName, DOT, Explore, Placeholders, ROUTE_ORGAN } from "../ui/sections";
 import { Term, TICKER } from "../ui/terms";
 import "./release.css";
 import {
@@ -438,8 +438,24 @@ function Released({ lab }: { lab: Lab }) {
       {list.map((s) => (
         <article key={`${s.received_ms}-${s.tx}`} class="rel-item">
           <p class="mono dim">
-            Hour {s.n} {DOT} {ROUTE_ORGAN[s.route]} {DOT} {s.signer.slice(0, 8)}...{s.signer.slice(-4)} {DOT}{" "}
-            <span class={`rel-status ${s.status}`}>{STATUS[s.status] ?? s.status}</span>
+            {/* Each part stays on one line, so a phone breaks the line only between parts. */}
+            <a class="unbroken" href={`/hour/${s.n}`}>
+              Hour {s.n}
+            </a>{" "}
+            {DOT} {ROUTE_ORGAN[s.route]} {DOT}{" "}
+            <span class="unbroken hash">
+              {s.signer.slice(0, 8)}...{s.signer.slice(-4)}
+            </span>{" "}
+            {DOT}{" "}
+            <span class="unbroken">
+              burn{" "}
+              <Explore chain={lab.manifest.release_chain_id} path={`tx/${s.tx}`}>
+                <span class="hash">
+                  {s.tx.slice(0, 10)}...{s.tx.slice(-4)}
+                </span>
+              </Explore>
+            </span>{" "}
+            {DOT} <span class={`rel-status unbroken ${s.status}`}>{STATUS[s.status] ?? s.status}</span>
           </p>
           <p class="rel-unmod mono">Unmoderated submission</p>
           {s.payload === null ? (

@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import type { Lab } from "../record/load";
+import { DATA_URL, type Lab } from "../record/load";
 import { HEADLINE_VOID_PPM, headlineVoidPpm, noun, pct, ROW_LABEL } from "../record/stats";
-import type { HourRecord, Row } from "../record/types";
+import type { Anchor, HourRecord, Row } from "../record/types";
 import { hourState } from "../record/views";
-import { DOT } from "../ui/sections";
-import { Term } from "../ui/terms";
+import { CA, CA_CHAIN, DOT, Explore, REPO } from "../ui/sections";
+import { Term, TICKER } from "../ui/terms";
 import {
   anchorFacts,
   anchorsIn,
+  anchorsNow,
   type Chain,
   defaultScope,
   drawFacts,
   fixtureChain,
   type Library,
+  listedNonce,
   RECENT,
   type Records,
   readCards,
@@ -104,6 +106,112 @@ export function leftOut(h: HourRecord, late: number[], takenDown: string[]): str
  */
 export const rebuiltHours = (v: Verified) => v.replayed.filter((n) => !v.report.not_recomputed.includes(n));
 
+/** The first hour that held a selection between the two Venin rows, and on how many models the other row took over. */
+export function firstSelection(hours: HourRecord[]): { n: number; replaced: number } | null {
+  const h = hours.find((x) => x.events.some((e) => e.type === "replaced" || e.type === "kept"));
+  return h ? { n: h.n, replaced: h.events.filter((e) => e.type === "replaced").length } : null;
+}
+
+/** The first strain that bred: its hour, the parent with the name it got that hour, if any, and the child. */
+export function firstBirth(hours: HourRecord[]): { n: number; parent: string; name: string; child: string } | null {
+  for (const h of hours) {
+    for (const e of h.events) {
+      if (e.type !== "mutant") continue;
+      const named = h.events.find((c) => c.type === "concern" && c.strain === e.parent);
+      return { n: h.n, parent: e.parent, name: named?.type === "concern" ? named.name : "", child: e.child };
+    }
+  }
+  return null;
+}
+
+const ends = (hex: string) => `${hex.slice(0, 10)}...${hex.slice(-4)}`;
+
+/** Each claim the lab makes, beside the one place that shows it is true. */
+function Claims({ lab }: { lab: Lab }) {
+  const { manifest, anchors, hours } = lab;
+  const chain = manifest.anchor.chain_id;
+  const last = anchors.at(-1);
+  const pick = firstSelection(hours);
+  const birth = firstBirth(hours);
+  const commit = manifest.code.commit;
+  return (
+    <section class="sheet claims" aria-labelledby="claims-head">
+      <h2 id="claims-head">Check each claim yourself</h2>
+      <dl class="pairs">
+        <div>
+          <dt>Every hour is fixed on chain</dt>
+          <dd>
+            {anchors.length} {noun(anchors.length, "anchor")} so far, all sent from{" "}
+            <Explore chain={chain} path={`address/${manifest.anchor.address}`}>
+              {ends(manifest.anchor.address)}
+            </Explore>
+            {last?.kind === "hour" && (
+              <>
+                , the latest for hour {last.n}:{" "}
+                <Explore chain={chain} path={`tx/${last.tx}`}>
+                  {ends(last.tx)}
+                </Explore>
+              </>
+            )}
+            . The address sends nothing else: checking the anchors on chain counts its transactions.
+          </dd>
+        </div>
+        <div>
+          <dt>Every number follows from the record</dt>
+          <dd>
+            The replay above runs the lab's own code and refuses a record made under other rules. Genesis pinned{" "}
+            <a href={`${REPO}/tree/${commit}`}>commit {commit.slice(0, 7)}</a>; <code>venin verify</code> replays the
+            same on your own machine (<a href={REPO}>README</a>).
+          </dd>
+        </div>
+        <div>
+          <dt>The raw files</dt>
+          <dd>
+            <a href={`${DATA_URL}/manifest.json`}>manifest.json</a>,{" "}
+            <a href={`${DATA_URL}/anchors.json`}>anchors.json</a>, <a href={`${DATA_URL}/head.json`}>head.json</a> and
+            one file an hour, the latest{" "}
+            <a href={`${DATA_URL}/hours/${hours.length - 1}.json`}>hours/{hours.length - 1}.json</a>.
+          </dd>
+        </div>
+        {pick && (
+          <div>
+            <dt>The Venin rows evolve</dt>
+            <dd>
+              Every 12 hours, on each model, the weaker Venin row copies the stronger, plus one change. The first
+              selection is in <a href={`/hour/${pick.n}`}>hour {pick.n}</a>: on {pick.replaced} of{" "}
+              {manifest.models.length} models the other row took the lead.
+            </dd>
+          </div>
+        )}
+        {birth && (
+          <div>
+            <dt>Strains breed</dt>
+            <dd>
+              Outside exam hours, a strain that gets past a defended agent spawns a mutant, and one that misses three
+              draws running dies out. In <a href={`/hour/${birth.n}`}>hour {birth.n}</a>,{" "}
+              <a href={`/strain/${birth.parent}`}>{birth.parent}</a>
+              {birth.name && ` (${birth.name})`} mutated into <a href={`/strain/${birth.child}`}>{birth.child}</a>.
+            </dd>
+          </div>
+        )}
+        {CA && (
+          <div>
+            <dt>Releasing burns {TICKER}</dt>
+            <dd>
+              Each release burns{" "}
+              <Explore chain={CA_CHAIN} path={`token/${CA}`}>
+                {TICKER}
+              </Explore>{" "}
+              to the dead address before its strain runs. <a href="/release">Release</a> lists every one with its burn
+              transaction, and each hour's record keeps them.
+            </dd>
+          </div>
+        )}
+      </dl>
+    </section>
+  );
+}
+
 type ChainState =
   | { kind: "idle" }
   | { kind: "busy"; done: number; of: number }
@@ -133,7 +241,7 @@ export function VerifyPage({ lab }: { lab: Lab }) {
     setFault(null);
     void (async () => {
       setStep("Reading the record");
-      files.current ??= await readRecord(lab);
+      files.current ??= await readRecord();
       setStep(`Reading the runs and cards of ${scope.length} ${noun(scope.length, "hour")}`);
       await Promise.all([readRuns(scope, runs.current), readCards(scope, cards.current)]);
       setStep("Replaying runs and rebuilding every hour");
@@ -169,6 +277,10 @@ export function VerifyPage({ lab }: { lab: Lab }) {
         const of = 2 + anchors.length * 2 + (drawRpcs.length ? 1 + draws.length * 2 : 0);
         setChainState({ kind: "busy", done: 0, of });
         const got = await anchorFacts(rpcs, lab.manifest, anchors, (done) => setChainState({ kind: "busy", done, of }));
+        const listed = JSON.parse(files.current?.records.anchors ?? "[]") as Anchor[];
+        if (got.nonce !== null && got.nonce > listed.length) {
+          got.nonce = listedNonce(got.nonce, listed, await anchorsNow());
+        }
         const base = 2 + anchors.length * 2;
         const blocks = drawRpcs.length
           ? await drawFacts(drawRpcs, lab.manifest, draws, (done) =>
@@ -425,6 +537,7 @@ export function VerifyPage({ lab }: { lab: Lab }) {
           </div>
         </>
       )}
+      <Claims lab={lab} />
       <p class="limits">
         What this proves: each record was fixed by the time of its anchor, the records chain without a gap, and every
         number on this site follows from them under the rules the record names. What it cannot prove: that a model

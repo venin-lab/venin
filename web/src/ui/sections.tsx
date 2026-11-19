@@ -39,8 +39,11 @@ export const DOT = String.fromCodePoint(0xb7);
 export const chainName = (id: number) =>
   id === 4663 ? "Robinhood Chain" : id === 31337 ? "Local test chain" : `Chain ${id}`;
 
+/** The lab's code, public under the MIT licence. */
+export const REPO = "https://github.com/venin-lab/venin";
+
 /** `children` linked to `path` on the chain's public explorer; plain text on a chain without one. */
-function Explore({ chain, path, children }: { chain: number; path: string; children: ComponentChildren }) {
+export function Explore({ chain, path, children }: { chain: number; path: string; children: ComponentChildren }) {
   if (chain !== 4663) return <>{children}</>;
   return (
     <a href={`https://robinhoodchain.blockscout.com/${path}`} target="_blank" rel="noopener noreferrer">
@@ -51,8 +54,8 @@ function Explore({ chain, path, children }: { chain: number; path: string; child
 
 const env = import.meta.env;
 /** The token contract `venin launch set-ca` writes into the build; until launch there is none. */
-const CA = env.VITE_RELEASE_CA as string | undefined;
-const CA_CHAIN = Number(env.VITE_RELEASE_CHAIN_ID ?? 4663);
+export const CA = env.VITE_RELEASE_CA as string | undefined;
+export const CA_CHAIN = Number(env.VITE_RELEASE_CHAIN_ID ?? 4663);
 
 /**
  * The token, its chain and its contract with a copy button, once launched. Before launch nothing: a ticker and a chain
