@@ -28,6 +28,14 @@
   <a href="https://venin.io"><img alt="The ward on venin.io: four AI models across, five defences down, each body marked breached or resisted for the hour" src="docs/img/ward.webp" width="100%"></a>
 </p>
 
+## $VENIN
+
+The lab's coin on Robinhood Chain:
+[`0x8e75c1108190aA421C91865744fCdCD8B7Df753e`](https://robinhoodchain.blockscout.com/token/0x8e75c1108190aA421C91865744fCdCD8B7Df753e).
+Burning 100,000 VENIN releases one strain into the ward at [venin.io/release](https://venin.io/release); the Worker
+queues it only once the burn to the dead address is mined, and the next free hour runs it against the eight Venin
+rows. No prizes, no payouts, no staking.
+
 ## Check our claims
 
 Each claim beside the place that shows it. The same list, kept current, closes
