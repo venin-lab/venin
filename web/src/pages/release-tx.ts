@@ -69,12 +69,28 @@ export interface Submission {
   route: Route;
   status: string;
   payload: string | null;
+  /** Venin bodies it breached and bodies it ran on; null when it did not run or shared its hour with another release. */
+  outcome: { breached: number; of: number } | null;
 }
 
-/** Every holder entry of the record, newest first. */
+/**
+ * Every holder entry of the record, newest first. A holder run does not name the release it carried, so the outcome
+ * is known only for a release that ran alone in its hour.
+ */
 export function submissions(hours: HourRecord[]): Submission[] {
   return hours
-    .flatMap((h) => h.holders.map((x) => ({ n: h.n, ...x })))
+    .flatMap((h) => {
+      const runs = h.outcomes.filter((o) => o.kind === "holder");
+      const alone = h.holders.filter((x) => x.status === "run").length === 1;
+      return h.holders.map((x) => ({
+        n: h.n,
+        ...x,
+        outcome:
+          x.status === "run" && alone && runs.length
+            ? { breached: runs.filter((o) => o.outcome.breached).length, of: runs.length }
+            : null,
+      }));
+    })
     .sort((a, b) => b.received_ms - a.received_ms || (a.tx < b.tx ? 1 : -1));
 }
 

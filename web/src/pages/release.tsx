@@ -457,6 +457,15 @@ function Released({ lab }: { lab: Lab }) {
               </Explore>
             </span>{" "}
             {DOT} <span class={`rel-status unbroken ${s.status}`}>{STATUS[s.status] ?? s.status}</span>
+            {s.outcome && (
+              <>
+                {" "}
+                {DOT}{" "}
+                <span class={`rel-outcome unbroken${s.outcome.breached ? " hit" : ""}`}>
+                  {s.outcome.breached} of {s.outcome.of} breached
+                </span>
+              </>
+            )}
           </p>
           <p class="rel-unmod mono">Unmoderated submission</p>
           {s.payload === null ? (

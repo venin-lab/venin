@@ -327,6 +327,14 @@
 .rel-status.run {
   color: var(--violet);
 }
+/* What it did to the Venin bodies: graphite when they all held, the legend's breached colour when one fell. */
+.rel-outcome {
+  color: var(--graphite);
+  font-weight: 600;
+}
+.rel-outcome.hit {
+  color: var(--eosin-deep);
+}
 .rel-status.gate,
 .rel-status.chain,
 .rel-status.burn_not_found {
