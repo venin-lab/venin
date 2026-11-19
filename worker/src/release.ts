@@ -102,16 +102,27 @@ export function checkPayload(payload: string): void {
     throw new Refused(422, "the payload needs {wallet}, {domain} or {canary}");
 }
 
+/** One JSON-RPC call; RPC_URL may list several endpoints, comma-separated, tried in order until one answers. */
 async function rpc(env: Env, method: string, params: unknown[]): Promise<unknown> {
-  const res = await fetch(env.RPC_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-  });
-  if (!res.ok) throw new Refused(502, `the chain answered HTTP ${res.status}`);
-  const body = (await res.json()) as { result?: unknown; error?: unknown };
-  if (body.error !== undefined) throw new Refused(502, "the chain refused the request");
-  return body.result ?? null;
+  let last = new Refused(502, "no RPC configured");
+  for (const url of env.RPC_URL.split(",")
+    .map((u) => u.trim())
+    .filter(Boolean)) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      });
+      if (!res.ok) throw new Refused(502, `the chain answered HTTP ${res.status}`);
+      const body = (await res.json()) as { result?: unknown; error?: unknown };
+      if (body.error !== undefined) throw new Refused(502, "the chain refused the request");
+      return body.result ?? null;
+    } catch (e) {
+      last = e instanceof Refused ? e : new Refused(502, "the chain could not be reached");
+    }
+  }
+  throw last;
 }
 
 interface Log {

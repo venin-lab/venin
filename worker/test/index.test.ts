@@ -128,6 +128,33 @@ describe("POST /api/release", () => {
     });
   });
 
+  it("falls back to the next RPC in the list when one refuses", async () => {
+    const { account, body } = await signed();
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      urls.push(new URL(url).host);
+      if (url.includes("down")) return new Response("busy", { status: 429 });
+      const { method, params } = JSON.parse(String(init.body)) as { method: string; params: string[] };
+      const result =
+        method === "eth_getCode"
+          ? "0x"
+          : method === "eth_getTransactionReceipt" && params[0] === TX
+            ? receipt(account.address, 1000n)
+            : null;
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result }));
+    });
+    const e = env({ RPC_URL: "http://down.test, http://chain.test" });
+    expect((await post(e, body)).status).toBe(202);
+    expect(urls).toContain("down.test");
+    expect(urls).toContain("chain.test");
+    vi.stubGlobal("fetch", async () => new Response("busy", { status: 429 }));
+    const again = await post(
+      env({ RPC_URL: "http://down.test,http://down2.test" }),
+      (await signed(PAYLOAD, "EAR", `0x${"cd".repeat(32)}`)).body,
+    );
+    expect(again.status).toBe(502);
+  });
+
   it("answers 503 while another submission of the burn is checked, and takes over a check that stopped", async () => {
     const { account, body } = await signed();
     chain("0x", { [TX]: receipt(account.address, 1000n) });
