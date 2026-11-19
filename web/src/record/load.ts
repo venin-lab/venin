@@ -157,7 +157,11 @@ export function vocNames(): Promise<string[]> {
   return names;
 }
 
-const ANCHOR_RPC: string = (import.meta.env.VITE_ANCHOR_RPC ?? "").split(",")[0]?.trim() ?? "";
+/** The anchor chain RPCs from VITE_ANCHOR_RPC, comma-separated, tried in order. */
+const ANCHOR_RPCS: string[] = ((import.meta.env.VITE_ANCHOR_RPC as string | undefined) ?? "")
+  .split(",")
+  .map((u) => u.trim())
+  .filter(Boolean);
 
 /** Block timestamps from a JSON-RPC batch reply, by block number. */
 export function blockTimes(reply: { result?: { number?: string; timestamp?: string } | null }[]): Map<number, number> {
@@ -175,7 +179,7 @@ export function blockTimes(reply: { result?: { number?: string; timestamp?: stri
 async function anchorTimes(lab: Lab): Promise<Map<number, number>> {
   const hourly = lab.anchors.filter((a) => a.kind === "hour");
   const out = new Map<number, number>();
-  if (ANCHOR_RPC) {
+  if (ANCHOR_RPCS.length) {
     const blocks = [...new Set(hourly.map((a) => a.block))];
     const times = new Map<number, number>();
     for (let i = 0; i < blocks.length; i += 100) {
@@ -185,12 +189,22 @@ async function anchorTimes(lab: Lab): Promise<Map<number, number>> {
         method: "eth_getBlockByNumber",
         params: [`0x${b.toString(16)}`, false],
       }));
-      const res = await fetch(ANCHOR_RPC, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(batch),
-      });
-      for (const [b, ts] of blockTimes(await res.json())) times.set(b, ts);
+      let reply: unknown = null;
+      for (const url of ANCHOR_RPCS) {
+        try {
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(batch),
+          });
+          reply = await res.json();
+          if (Array.isArray(reply)) break;
+        } catch {
+          reply = null;
+        }
+      }
+      if (!Array.isArray(reply)) throw new Error("no anchor RPC answered");
+      for (const [b, ts] of blockTimes(reply)) times.set(b, ts);
     }
     for (const a of hourly) {
       const ts = times.get(a.block);
