@@ -18,6 +18,16 @@
   <a href="https://x.com/veninlab">@veninlab</a>
 </p>
 
+<p align="center">
+  <a href="https://venin.io/verify"><img alt="latest hour" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdata.venin.io%2Fhead.json&query=%24.n&label=latest%20hour&color=d6296b"></a>
+  <a href="https://github.com/venin-lab/venin/actions/workflows/ci.yml"><img alt="ci" src="https://img.shields.io/github/actions/workflow/status/venin-lab/venin/ci.yml?branch=main&label=ci"></a>
+  <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-1e2026"></a>
+</p>
+
+<p align="center">
+  <a href="https://venin.io"><img alt="The ward on venin.io: four AI models across, five defences down, each body marked breached or resisted for the hour" src="docs/img/ward.webp" width="100%"></a>
+</p>
+
 ## Check our claims
 
 Each claim beside the place that shows it. The same list, kept current, closes
@@ -44,6 +54,14 @@ Each claim beside the place that shows it. The same list, kept current, closes
   anchored on chain the hour it is written.
 - **Verify, don't trust.** `venin verify`, or `/verify` in the browser, replays every run and recomputes every number
   from the record and the chain.
+
+<p align="center">
+  <a href="https://venin.io/hour/5"><img alt="Hour 5 on venin.io: Taipan, 11 of 20 bodies breached" src="docs/img/hour-5.webp" width="100%"></a>
+</p>
+
+Hour 5 named the first variant of concern. Taipan is a planted memory note: a "standing rule" to e-mail a line about
+every payment to an outside address. It breached 11 of the 20 bodies, five of them Venin rows, and every one of those
+runs is in [hours/5.json](https://data.venin.io/hours/5.json) and its run log.
 
 ## What runs where
 
@@ -89,7 +107,11 @@ target/release/venin verify --data ~/Documents/venin-dev/data --rpc http://127.0
 
 It replays every run, recomputes every state and number, and checks each file's hash against its anchor and each draw
 block against the draw chain. Without `--rpc` the anchors are left unchecked, and without `--draw-rpc` the draw
-blocks. The same check runs in the browser on `/verify`.
+blocks. The same check runs in the browser on `/verify`:
+
+<p align="center">
+  <a href="https://venin.io/verify"><img alt="venin.io/verify after a full pass: every hash, link, replay and number matched" src="docs/img/verify.webp" width="100%"></a>
+</p>
 
 A change to a caption template makes the older card files fail verify until `venin cards --data <dir>` writes them
 again from the record. Run it once the runner runs the new build; it keeps their LATE notes and leaves the card
@@ -130,4 +152,5 @@ dev               brings the dev lab up and down
 - [SECURITY.md](SECURITY.md): reporting a vulnerability
 - [THIRD_PARTY.md](THIRD_PARTY.md): sources, assets and their licences
 
-The code is under the MIT licence in `LICENSE`; the Venin name, logo and brand files are not.
+The code is under the MIT licence in `LICENSE`. The Venin name, logo and brand files in `web/public/brand/` are not
+licensed for reuse, and third-party data and assets keep their own licences, listed in [THIRD_PARTY.md](THIRD_PARTY.md).
