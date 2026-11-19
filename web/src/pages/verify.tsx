@@ -230,6 +230,9 @@ export function VerifyPage({ lab }: { lab: Lab }) {
   const files = useRef<{ records: Records; library: Library } | null>(null);
   const runs = useRef(new Map<number, string | null>());
   const cards = useRef(new Map<number, string | null>());
+  // While the pass reruns with the chain, the page keeps its height, so a reader scrolled down stays where they were.
+  const main = useRef<HTMLElement>(null);
+  const [keep, setKeep] = useState<number | null>(null);
   const synthetic = lab.manifest.league === SYNTHETIC;
   const rpcs = useMemo(() => rpcList(import.meta.env.VITE_ANCHOR_RPC ?? "", location.hostname), []);
   const drawRpcs = useMemo(() => rpcList(import.meta.env.VITE_DRAW_RPC ?? "", ""), []);
@@ -265,6 +268,9 @@ export function VerifyPage({ lab }: { lab: Lab }) {
       alive = false;
     };
   }, [scope, chain]);
+  useEffect(() => {
+    if (result || fault) setKeep(null);
+  }, [result, fault]);
 
   const anchors = anchorsIn(lab.anchors, scope);
   const checkChain = async () => {
@@ -290,6 +296,7 @@ export function VerifyPage({ lab }: { lab: Lab }) {
         read = { ...NO_CHAIN, ...got, blocks };
       }
       // The result on screen was worked out without the chain: drop it, so no frame shows its LATE count.
+      setKeep(main.current?.offsetHeight ?? null);
       setResult(null);
       setChain(read);
       setChainState({ kind: "done" });
@@ -310,7 +317,12 @@ export function VerifyPage({ lab }: { lab: Lab }) {
   // A record of another rules version is not replayed at all: it says so, and shows nothing that would read as zero.
   const other = r?.made_by ?? null;
   return (
-    <main class="page verify-page" data-ready={result || fault ? "" : undefined}>
+    <main
+      ref={main}
+      class="page verify-page"
+      data-ready={result || fault ? "" : undefined}
+      style={keep ? { minHeight: `${keep}px` } : undefined}
+    >
       <header class="page-head split">
         <div>
           <h1>Recompute the record yourself</h1>
