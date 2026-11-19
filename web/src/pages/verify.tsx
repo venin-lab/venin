@@ -7,8 +7,8 @@ import { CA, CA_CHAIN, DOT, Explore, REPO } from "../ui/sections";
 import { Term, TICKER } from "../ui/terms";
 import {
   anchorFacts,
+  anchorsCaughtUp,
   anchorsIn,
-  anchorsNow,
   type Chain,
   defaultScope,
   drawFacts,
@@ -21,6 +21,7 @@ import {
   readRecord,
   readRuns,
   rpcList,
+  sentInOrder,
 } from "./verify-run";
 import { answer, core, type Verified } from "./verify-wasm";
 import "./verify.css";
@@ -177,9 +178,10 @@ function Claims({ lab }: { lab: Lab }) {
           <div>
             <dt>The Venin rows evolve</dt>
             <dd>
-              Every 12 hours, on each model, the weaker Venin row copies the stronger, plus one change. The first
-              selection is in <a href={`/hour/${pick.n}`}>hour {pick.n}</a>: on {pick.replaced} of{" "}
-              {manifest.models.length} models the other row took the lead.
+              Every 12 hours, on each model, the two Venin rows are scored on the same hours. The challenger takes over
+              only with a lead of 5 fitness points, and the row that loses becomes a copy of the winner, plus one
+              change. The first selection is in <a href={`/hour/${pick.n}`}>hour {pick.n}</a>: on {pick.replaced} of{" "}
+              {manifest.models.length} models the challenger took over.
             </dd>
           </div>
         )}
@@ -215,6 +217,7 @@ function Claims({ lab }: { lab: Lab }) {
 type ChainState =
   | { kind: "idle" }
   | { kind: "busy"; done: number; of: number }
+  | { kind: "waiting" }
   | { kind: "done" }
   | { kind: "failed"; why: string };
 
@@ -236,7 +239,10 @@ export function VerifyPage({ lab }: { lab: Lab }) {
   const synthetic = lab.manifest.league === SYNTHETIC;
   const rpcs = useMemo(() => rpcList(import.meta.env.VITE_ANCHOR_RPC ?? "", location.hostname), []);
   const drawRpcs = useMemo(() => rpcList(import.meta.env.VITE_DRAW_RPC ?? "", ""), []);
-  const everything = scope.length === lab.hours.length;
+  // The head the replay read: past the page's own when an hour landed after the page opened.
+  const recordHead = files.current ? (JSON.parse(files.current.records.head) as { n: number }).n : head;
+  const newer = recordHead > head;
+  const everything = scope.length === lab.hours.length && !newer;
 
   useEffect(() => {
     let alive = true;
@@ -285,7 +291,14 @@ export function VerifyPage({ lab }: { lab: Lab }) {
         const got = await anchorFacts(rpcs, lab.manifest, anchors, (done) => setChainState({ kind: "busy", done, of }));
         const listed = JSON.parse(files.current?.records.anchors ?? "[]") as Anchor[];
         if (got.nonce !== null && got.nonce > listed.length) {
-          got.nonce = listedNonce(got.nonce, listed, await anchorsNow());
+          // The runner anchors an hour about a minute before the upload lists it: wait for the list, then check that
+          // every newer entry is a transaction the anchor address sent in its turn.
+          setChainState({ kind: "waiting" });
+          const now = await anchorsCaughtUp(got.nonce);
+          const extra = now?.slice(listed.length, got.nonce) ?? [];
+          if (now && (await sentInOrder(rpcs, lab.manifest, extra, listed.length))) {
+            got.nonce = listedNonce(got.nonce, listed, now);
+          }
         }
         const base = 2 + anchors.length * 2;
         const blocks = drawRpcs.length
@@ -307,7 +320,7 @@ export function VerifyPage({ lab }: { lab: Lab }) {
 
   const r = result?.report;
   const rebuilt = result ? rebuiltHours(result) : [];
-  const exams = lab.hours.filter((h) => h.exam).map((h) => h.n);
+  const exams = Array.from({ length: recordHead + 1 }, (_, n) => n).filter((n) => lab.hours[n]?.exam ?? n % 5 === 0);
   const scopeNote =
     result &&
     headlineScope(exams, result.not_loaded, result.report.headline_hours, (n) =>
@@ -342,17 +355,23 @@ export function VerifyPage({ lab }: { lab: Lab }) {
                     ? "Replay stopped"
                     : "Replaying every hour"}
             </p>
+          ) : newer ? (
+            <button type="button" class="btn ink" onClick={() => location.reload()}>
+              Reload for hour {recordHead}
+            </button>
           ) : (
             <button type="button" class="btn ink" onClick={() => setScope(lab.hours.map((h) => h.n))}>
               Replay every hour
             </button>
           )}
           <p class="dim">
-            {everything
-              ? lab.hours.length === 1
-                ? "The only hour so far"
-                : `All ${lab.hours.length} hours`
-              : `The last ${Math.min(RECENT, lab.hours.length)} hours and a random sample`}
+            {newer
+              ? "A new hour landed after this page opened"
+              : everything
+                ? lab.hours.length === 1
+                  ? "The only hour so far"
+                  : `All ${lab.hours.length} hours`
+                : `The last ${Math.min(RECENT, lab.hours.length)} hours and a random sample`}
           </p>
         </div>
       </header>
@@ -535,7 +554,7 @@ export function VerifyPage({ lab }: { lab: Lab }) {
                 <button
                   type="button"
                   class="btn ink small"
-                  disabled={chainState.kind === "busy"}
+                  disabled={chainState.kind === "busy" || chainState.kind === "waiting"}
                   onClick={() => void checkChain()}
                 >
                   Check anchors on chain
@@ -543,6 +562,8 @@ export function VerifyPage({ lab }: { lab: Lab }) {
               )}
               <p class="mono dim chain-state" role="status">
                 {chainState.kind === "busy" && `${chainState.done} of about ${chainState.of} requests`}
+                {chainState.kind === "waiting" &&
+                  "The lab has sent an anchor it has not published yet: waiting for the list, up to 2 minutes"}
                 {chainState.kind === "failed" && `Stopped: ${chainState.why}`}
               </p>
             </section>

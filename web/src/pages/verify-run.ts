@@ -56,7 +56,7 @@ export interface Library {
  * names, not the page's: a page left open past an upload would pair the new anchors.json with its old hours.
  */
 export async function readRecord(): Promise<{ records: Records; library: Library }> {
-  const [manifest, exam, anchors, head, takedowns, strains, tasks, genes, rows, names] = await Promise.all([
+  const [manifest, exam, anchors, headText, takedowns, strains, tasks, genes, rows, names] = await Promise.all([
     need("manifest.json"),
     need("exam.json"),
     need("anchors.json"),
@@ -68,6 +68,14 @@ export async function readRecord(): Promise<{ records: Records; library: Library
     need("library/rows.json"),
     need("library/voc-names.txt"),
   ]);
+  let head = headText;
+  // The upload sends anchors.json a moment before head.json: a list that already names the next hour waits for its head.
+  const newest = (JSON.parse(anchors) as Anchor[]).reduce((m, a) => (a.kind === "hour" ? Math.max(m, a.n) : m), -1);
+  for (let i = 0; i < 6 && (JSON.parse(head) as { n: number }).n < newest; i++) {
+    await pause(1500);
+    const res = await fetch(`${DATA_URL}/head.json`, { cache: "no-store" });
+    if (res.ok) head = await res.text();
+  }
   const hours: Record<string, string> = {};
   const ns = Array.from({ length: (JSON.parse(head) as { n: number }).n + 1 }, (_, n) => n);
   const texts = await Promise.all(ns.map((n) => need(`hours/${n}.json`)));
@@ -248,6 +256,43 @@ export async function anchorsNow(): Promise<Anchor[] | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * anchors.json read again until it names `nonce` anchors, or `tries` reads `waitMs` apart: the runner sends an hour's
+ * anchor a minute or so before the upload that publishes the list naming it. The last read, whatever it holds.
+ */
+export async function anchorsCaughtUp(
+  nonce: number,
+  tries = 15,
+  waitMs = 10_000,
+  wait: (ms: number) => Promise<unknown> = pause,
+): Promise<Anchor[] | null> {
+  let now = await anchorsNow();
+  for (let i = 1; i < tries && (now === null || now.length < nonce); i++) {
+    await wait(waitMs);
+    now = await anchorsNow();
+  }
+  return now;
+}
+
+/**
+ * True when every one of `extra`, the anchors listed after the `first` ones this pass verifies, is a transaction the
+ * anchor address sent with the nonce its place in the list gives: so a transaction the lab never anchored cannot hide
+ * behind a newer list.
+ */
+export async function sentInOrder(
+  rpcs: string[],
+  manifest: Manifest,
+  extra: Anchor[],
+  first: number,
+): Promise<boolean> {
+  for (const [i, a] of extra.entries()) {
+    const tx = (await call(rpcs, "eth_getTransactionByHash", [a.tx])) as Record<string, string> | null;
+    if (!tx || (tx.from ?? "").toLowerCase() !== manifest.anchor.address.toLowerCase()) return false;
+    if (quantity(tx.nonce) !== first + i) return false;
+  }
+  return true;
 }
 
 /**

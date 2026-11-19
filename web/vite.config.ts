@@ -58,7 +58,7 @@ function csp(dataUrl: string, rpcs: string[], wallet: boolean): Plugin {
     "default-src 'self'",
     "script-src 'self' 'wasm-unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
-    `img-src 'self' data: blob:${wc("img")}`,
+    `img-src 'self' data: blob:${originOf(dataUrl)}${wc("img")}`,
     "font-src 'self'",
     `connect-src 'self'${origin}${wc("connect")}`,
     wallet ? `frame-src${WALLETCONNECT.frame}` : "frame-src 'none'",

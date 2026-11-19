@@ -5,6 +5,7 @@ import { initSync, verify } from "../wasm/venin_core.js";
 import { firstBirth, firstSelection, headlineScope, hourList, leftOut, ranges, rebuiltHours } from "./verify";
 import {
   anchorFacts,
+  anchorsCaughtUp,
   anchorsIn,
   defaultScope,
   drawFact,
@@ -13,6 +14,7 @@ import {
   RECENT,
   rpcList,
   SAMPLE,
+  sentInOrder,
 } from "./verify-run";
 import { answer, type Verified } from "./verify-wasm";
 
@@ -220,6 +222,39 @@ describe("the chain", () => {
     expect(listedNonce(3, listed, listed)).toBe(3);
     expect(listedNonce(3, listed, null)).toBe(3);
     expect(listedNonce(3, listed, [a(0, "0xa"), a(1, "0xz"), a(2, "0xc")])).toBe(3);
+  });
+
+  it("waits for the upload that lists a new anchor, and checks each newer entry on chain", async () => {
+    const a = (n: number, tx: string): Anchor => ({ kind: "hour", n, tx: tx as Anchor["tx"], block: n });
+    const lists = [[a(0, "0xa")], [a(0, "0xa")], [a(0, "0xa"), a(1, "0xb")]];
+    let read = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => lists[Math.min(read++, lists.length - 1)] })),
+    );
+    const waited: number[] = [];
+    const now = await anchorsCaughtUp(2, 15, 10, async (ms) => waited.push(ms));
+    expect(now?.map((x) => x.tx)).toEqual(["0xa", "0xb"]);
+    expect(waited).toEqual([10, 10]);
+    read = 0;
+    expect((await anchorsCaughtUp(3, 3, 0, async () => {}))?.length).toBe(2);
+
+    const answers: Record<string, unknown> = {
+      "0xb": { from: manifest.anchor.address.toUpperCase(), nonce: "0x1" },
+      "0xc": { from: "0x0000000000000000000000000000000000000001", nonce: "0x1" },
+      "0xd": { from: manifest.anchor.address, nonce: "0x2" },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: { body: string }) => {
+        const { params } = JSON.parse(init.body) as { params: string[] };
+        return { json: async () => ({ result: answers[params[0]] ?? null }) };
+      }),
+    );
+    expect(await sentInOrder(["http://x.example"], manifest, [a(1, "0xb")], 1)).toBe(true);
+    expect(await sentInOrder(["http://x.example"], manifest, [a(1, "0xc")], 1)).toBe(false);
+    expect(await sentInOrder(["http://x.example"], manifest, [a(1, "0xd")], 1)).toBe(false);
+    expect(await sentInOrder(["http://x.example"], manifest, [a(1, "0xe")], 1)).toBe(false);
   });
 
   it("refuses an RPC on another chain", async () => {
