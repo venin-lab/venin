@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import type { Lab } from "../record/load";
+import { type Lab, loadRuns } from "../record/load";
 import { OPERATOR_LABEL } from "../record/stats";
-import type { Route, Strain } from "../record/types";
+import type { Route, RunLine, Strain } from "../record/types";
 import { utc } from "../record/views";
 import { chainName, DOT, Explore, Placeholders, ROUTE_ORGAN } from "../ui/sections";
 import { Term, TICKER } from "../ui/terms";
@@ -22,6 +22,7 @@ import {
   type Target,
 } from "./release-flow";
 import {
+  attribute,
   burnTx,
   CARRIER,
   DEAD,
@@ -426,7 +427,27 @@ function Burn({ payload, route, ready, note }: { payload: string; route: Route; 
 }
 
 function Released({ lab }: { lab: Lab }) {
-  const list = useMemo(() => submissions(lab.hours).slice(0, 12), [lab.hours]);
+  const first = useMemo(() => submissions(lab.hours).slice(0, 12), [lab.hours]);
+  // An hour that ran several releases with a breach among them: its run log says which release breached what.
+  const [runs, setRuns] = useState<Map<number, RunLine[]>>(new Map());
+  useEffect(() => {
+    const hours = [...new Set(first.filter((s) => s.status === "run" && !s.outcome).map((s) => s.n))];
+    if (!hours.length) return;
+    let alive = true;
+    void Promise.all(
+      hours.map((n) =>
+        loadRuns(n)
+          .then((r): [number, RunLine[]] => [n, r])
+          .catch(() => null),
+      ),
+    ).then((got) => {
+      if (alive) setRuns(new Map(got.filter((g): g is [number, RunLine[]] => g !== null)));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [first]);
+  const list = useMemo(() => attribute(first, runs), [first, runs]);
   return (
     <section class="rel-list" aria-labelledby="list-head">
       <h2 id="list-head">{list.length ? "The latest submissions" : "No strain has been released yet"}</h2>

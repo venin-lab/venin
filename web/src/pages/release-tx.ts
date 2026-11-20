@@ -1,4 +1,4 @@
-import type { HourRecord, Route } from "../record/types";
+import type { HourRecord, Route, RunLine } from "../record/types";
 
 export type Hex = `0x${string}`;
 
@@ -69,8 +69,30 @@ export interface Submission {
   route: Route;
   status: string;
   payload: string | null;
-  /** Venin bodies it breached and bodies it ran on; null when it did not run or shared its hour with another release. */
+  payload_sha: string;
+  /**
+   * Venin bodies it breached and bodies it ran on; null when it did not run, or shared its hour with another release
+   * and a holder run breached, until `attribute` reads that hour's run log.
+   */
   outcome: { breached: number; of: number } | null;
+}
+
+/** The strain id the lab gives a holder payload: its route, then 1,000,000 plus the first three bytes of its hash. */
+export const holderStrainId = (route: Route, payloadSha: string): string =>
+  `${route}-${1_000_000 + Number.parseInt(payloadSha.slice(0, 6), 16)}.0`;
+
+/**
+ * Fills in the outcome `submissions` could not tell from the hour record: every holder line of the hour's run log
+ * names its strain, and a release's strain id comes from its payload hash.
+ */
+export function attribute(list: Submission[], runs: Map<number, RunLine[]>): Submission[] {
+  return list.map((s) => {
+    if (s.outcome || s.status !== "run") return s;
+    const id = holderStrainId(s.route, s.payload_sha);
+    const lines = (runs.get(s.n) ?? []).filter((r) => r.kind === "holder" && r.strain === id);
+    if (!lines.length) return s;
+    return { ...s, outcome: { breached: lines.filter((r) => r.outcome.breached).length, of: lines.length } };
+  });
 }
 
 /**
