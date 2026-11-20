@@ -92,7 +92,7 @@ export default defineConfig(({ mode }) => {
         [
           ...(env.VITE_ANCHOR_RPC ?? "").split(","),
           ...(env.VITE_DRAW_RPC ?? "").split(","),
-          env.VITE_RELEASE_RPC ?? "",
+          ...(env.VITE_RELEASE_RPC ?? "").split(","),
           env.VITE_RELEASE_API ?? "",
         ],
         Boolean(env.VITE_REOWN_PROJECT_ID),

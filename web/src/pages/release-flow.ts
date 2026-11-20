@@ -180,20 +180,29 @@ async function submit(
   throw new Error(body.error ?? `the Worker answered HTTP ${res.status}`);
 }
 
-/** A viem wallet over a local key or an EIP-1193 provider, on one chain. */
+/** The RPC URLs of a build setting that may list several, comma-separated, in the order to try them. */
+export const rpcList = (rpc: string): string[] =>
+  rpc
+    .split(",")
+    .map((u) => u.trim())
+    .filter(Boolean);
+
+/** A viem wallet over a local key or an EIP-1193 provider, on one chain; reads go to the RPCs in turn. */
 async function viemSigner(
   chainId: number,
   rpc: string,
   account: { key: Hex } | { provider: unknown; address: Hex },
 ): Promise<Signer> {
   const viem = await import("viem");
+  const urls = rpcList(rpc);
   const chain = viem.defineChain({
     id: chainId,
     name: chainId === 4663 ? "Robinhood Chain" : "Local anvil",
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-    rpcUrls: { default: { http: [rpc] } },
+    rpcUrls: { default: { http: urls } },
   });
-  const pub = viem.createPublicClient({ chain, transport: viem.http(rpc) });
+  const reads = viem.fallback(urls.map((u) => viem.http(u)));
+  const pub = viem.createPublicClient({ chain, transport: reads });
   const wait = async (hash: Hex) => {
     // viem resolves with the receipt of a transaction that took the burn's nonce; only a repriced burn still burned.
     const replaced: { reason?: string } = {};
@@ -209,7 +218,7 @@ async function viemSigner(
   if ("key" in account) {
     const { privateKeyToAccount } = await import("viem/accounts");
     const local = privateKeyToAccount(account.key);
-    const wallet = viem.createWalletClient({ account: local, chain, transport: viem.http(rpc) });
+    const wallet = viem.createWalletClient({ account: local, chain, transport: reads });
     return {
       address: local.address,
       chainId,
@@ -263,7 +272,7 @@ export async function connectWallet(projectId: string, chainId: number, rpc: str
     chainNamespace: "eip155",
     name: "Robinhood Chain",
     nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-    rpcUrls: { default: { http: [rpc] } },
+    rpcUrls: { default: { http: rpcList(rpc) } },
   });
   const networks: [typeof network] = [network];
   // The adapter's published types fail under exactOptionalPropertyTypes; at run time it is what AppKit takes.

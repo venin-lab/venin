@@ -533,6 +533,40 @@ pub mod tests {
         }
     }
 
+    /// Against a live Worker and chain (Defend end to end on anvil): an agent the site sent with the dev wallet comes
+    /// through the intake as `run` and the core plans its run. Set VENIN_E2E_DEFENDS (the Worker's /api/defends),
+    /// VENIN_E2E_RPC, VENIN_E2E_TOKEN, VENIN_E2E_AMOUNT and VENIN_QUEUE_TOKEN, then run with `--ignored`.
+    #[test]
+    #[ignore = "needs a running Worker and anvil"]
+    fn a_live_defend_queue_feeds_the_next_plan() {
+        let var = |k: &str| std::env::var(k).unwrap_or_else(|_| panic!("{k} is not set"));
+        let config = Release {
+            queue_url: String::new(),
+            slots: 0,
+            chain_id: 31337,
+            token: var("VENIN_E2E_TOKEN"),
+            amount: var("VENIN_E2E_AMOUNT"),
+            rpcs: vec![var("VENIN_E2E_RPC")],
+            defend_url: var("VENIN_E2E_DEFENDS"),
+            defend_slots: 12,
+        };
+        let net = Net::new(&[config.defend_url.clone(), config.rpcs[0].clone()]).expect("client");
+        let intake = Intake::new(&net, &config, var(TOKEN_ENV)).expect("intake");
+        let (lab, state) = crate::model::tests::test_lab();
+        let defenders = intake.take_defenders(&lab, &state, 1, &[]).expect("takes");
+        for d in &defenders {
+            println!("{} {} {:?}", d.key(), d.column, d.status);
+        }
+        assert!(defenders.iter().any(|d| d.status == HolderStatus::Run));
+        let p =
+            plan(&lab, &state, 1, &[3; 32], &[], &defenders).expect("the core takes the period");
+        assert!(
+            p.runs
+                .iter()
+                .any(|r| r.kind == venin_core::record::RunKind::Defend)
+        );
+    }
+
     /// Defend entries pass through the same checks as releases: a burn a release of the period took is reused, rules
     /// the gate refuses leave the record, a signature over other rules is a chain mismatch, and one agent runs.
     #[test]

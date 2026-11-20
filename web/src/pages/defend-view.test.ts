@@ -14,6 +14,7 @@ import {
   stay,
   suggestions,
 } from "./defend-view";
+import { rpcList } from "./release-flow";
 
 const TX = `0x${"0a1b2c3d".repeat(8)}`;
 const ID = "0a1b2c3d0a1b2c3d";
@@ -151,5 +152,12 @@ describe("cure", () => {
       { gene: "I03", covers: [2, 4] },
       { gene: "S01", covers: [2] },
     ]);
+  });
+});
+
+describe("rpcList", () => {
+  it("reads a build's comma-separated RPCs in order, so a burn's receipt is read from a real URL", () => {
+    expect(rpcList("https://a.example, https://b.example,")).toEqual(["https://a.example", "https://b.example"]);
+    expect(rpcList("http://127.0.0.1:8546")).toEqual(["http://127.0.0.1:8546"]);
   });
 });
