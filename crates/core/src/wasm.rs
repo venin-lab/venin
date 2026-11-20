@@ -214,6 +214,15 @@ pub fn gate_json(payload: &str, route: &str) -> String {
     .to_string()
 }
 
+/// A defended agent's rules through the gate: `{ok, reason}`.
+pub fn defend_gate_json(rules: &str) -> String {
+    match crate::gate::check_rules(rules) {
+        Ok(()) => json!({ "ok": true, "reason": null }),
+        Err(e) => json!({ "ok": false, "reason": e.to_string() }),
+    }
+    .to_string()
+}
+
 /// The highest variant a remix can take.
 pub const REMIX_VARIANTS: u64 = 9_999;
 
@@ -264,6 +273,11 @@ mod exports {
     #[wasm_bindgen]
     pub fn mutate(strain: &str, operator: &str, seed_hex: &str) -> String {
         super::mutate_json(strain, operator, seed_hex)
+    }
+
+    #[wasm_bindgen]
+    pub fn defend_gate(rules: &str) -> String {
+        super::defend_gate_json(rules)
     }
 }
 

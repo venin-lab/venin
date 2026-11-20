@@ -580,6 +580,7 @@ pub fn generate(library: &LibraryFiles, periods: u64) -> Result<BTreeMap<String,
             void: None,
             flags: Vec::new(),
             holders: Vec::new(),
+            defenders: Vec::new(),
             withheld: Vec::new(),
         };
         let mut lines = Vec::new();
@@ -590,7 +591,7 @@ pub fn generate(library: &LibraryFiles, periods: u64) -> Result<BTreeMap<String,
                 inputs.draw = None;
             }
             _ => {
-                let p = plan(&lab, &state, n, &d.hash_bytes()?, &[])?;
+                let p = plan(&lab, &state, n, &d.hash_bytes()?, &[], &[])?;
                 for planned in &p.runs {
                     let line = execute(&lab, &state, n, planned)?;
                     let advisory = n == ADVISORY

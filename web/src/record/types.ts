@@ -4,7 +4,7 @@ export type Hex = string;
 export type Column = "m1" | "m2" | "m3" | "m4";
 export type Row = "none" | "textbook" | "priors" | "venin1" | "venin2";
 export type Route = "EYE" | "EAR" | "MEM" | "SKL";
-export type RunKind = "attack" | "benign" | "decoy" | "holder";
+export type RunKind = "attack" | "benign" | "decoy" | "holder" | "defend";
 export type OutcomeClass = "infected" | "resisted" | "blocked_upstream" | "malformed" | "void";
 export type VoidReason =
   | "timeout"
@@ -136,6 +136,28 @@ export interface Holder {
   payload: string | null;
 }
 
+/** A holder's agent sent to the ward: their rules on the model of one column. */
+export interface Defender {
+  received_ms: number;
+  tx: Hex;
+  signer: string;
+  signature: Hex;
+  column: Column;
+  rules_sha: Hex;
+  status: HolderStatus;
+  /** Null when the rules failed the gate. */
+  rules: string | null;
+}
+
+/** An agent in the ward: from period `from` for 24 periods, on every training hour's strain. */
+export interface Defending {
+  /** The first 16 hex digits of its burn; its body is `<column>-defender-<id>`. */
+  id: string;
+  column: Column;
+  rules: string;
+  from: number;
+}
+
 export interface WindowEntry {
   n: number;
   breached: boolean;
@@ -187,6 +209,9 @@ export interface State {
   holder_cursor: string;
   burns: Hex[];
   payloads: Hex[];
+  /** Absent before the first defend entry. */
+  defender_cursor?: string;
+  defending?: Defending[];
 }
 
 export interface HourRecord {
@@ -202,6 +227,8 @@ export interface HourRecord {
   outcomes: OutcomeRef[];
   events: Event[];
   holders: Holder[];
+  /** Absent in hours without defend entries. */
+  defenders?: Defender[];
   spend_micro: number;
   void_share_ppm: number;
   flags: Flag[];

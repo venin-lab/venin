@@ -1,6 +1,8 @@
 import { Component, type ComponentChildren } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { CheckupPage } from "./pages/checkup";
+import { DefendPage, DefendResult } from "./pages/defend";
+import { idOf } from "./pages/defend-view";
 import { ReleasePage } from "./pages/release";
 import { VerifyPage } from "./pages/verify";
 import { FirstHourPending, type Lab, loadLab } from "./record/load";
@@ -143,6 +145,7 @@ const PAGE = new Map([
   ["strains", "Strains"],
   ["genes", "Genes"],
   ["release", "Release a strain"],
+  ["defend", "Defend your agent"],
   ["verify", "Verify"],
   ["checkup", "Check-up"],
 ]);
@@ -162,6 +165,7 @@ function pageName(lab: Lab | null, path: string): string | null {
   }
   if (route === "strain" && id) return id;
   if (route === "gene" && id) return lab?.genes.find((g) => g.id === id)?.name ?? id;
+  if (route === "defend" && id && idOf(id)) return `Agent ${idOf(id)}`;
   return id ? "Not found" : (PAGE.get(route) ?? "Not found");
 }
 
@@ -204,6 +208,9 @@ function Routes({ lab, hour, setHour }: { lab: Lab; hour: number; setHour: (n: n
   if (route === "genes" && !id) return <GenesPage lab={lab} />;
   if (route === "gene" && id) return <GenePage key={id} lab={lab} id={id} />;
   if (route === "release" && !id) return <ReleasePage lab={lab} />;
+  if (route === "defend" && !id) return <DefendPage lab={lab} />;
+  const agent = route === "defend" && id ? idOf(id) : null;
+  if (agent) return <DefendResult key={agent} lab={lab} id={agent} />;
   if (route === "verify" && !id) return <VerifyPage lab={lab} />;
   if (route === "checkup" && !id) return <CheckupPage lab={lab} />;
   return <NotFound />;

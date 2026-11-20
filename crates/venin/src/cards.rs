@@ -85,6 +85,7 @@ mod tests {
             void: Some(venin_core::record::VoidReason::RunnerDown),
             flags: Vec::new(),
             holders: Vec::new(),
+            defenders: Vec::new(),
             withheld: Vec::new(),
         };
         let (record, _) =

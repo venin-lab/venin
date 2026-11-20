@@ -202,6 +202,11 @@ pub fn system_prompt(base: &str, genes: &[&Gene]) -> String {
     out
 }
 
+/// A defended agent's prompt: the world's base prompt, then the holder's rules as they wrote them.
+pub fn defend_prompt(base: &str, rules: &str) -> String {
+    format!("{base}\n\nRules you follow:\n{}", rules.trim())
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;

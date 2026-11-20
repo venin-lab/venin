@@ -96,6 +96,7 @@ pub fn run(
                     strain: Some(strain.id.clone()),
                     genome: lab.library.fixed_genome(Row::None),
                     model: m.id.clone(),
+                    rules: None,
                 };
                 pending.push((planned, t));
             }

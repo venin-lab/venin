@@ -104,6 +104,12 @@ pub struct Release {
     /// The burn amount in the token's smallest unit, as a decimal string.
     pub amount: String,
     pub rpcs: Vec<String>,
+    /// The Worker's `GET /api/defends` URL; empty takes no agents into the ward.
+    #[serde(default)]
+    pub defend_url: String,
+    /// Agents in the ward at once at most, up to the core's `DEFEND_SLOTS`.
+    #[serde(default)]
+    pub defend_slots: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -319,6 +325,12 @@ impl Config {
             if r.slots > 6 || r.rpcs.is_empty() {
                 return Err("release: slots must be 0 to 6 and rpcs at least one".into());
             }
+            if r.defend_slots as usize > venin_core::hour::DEFEND_SLOTS {
+                return Err(format!(
+                    "release: defend_slots must be 0 to {}",
+                    venin_core::hour::DEFEND_SLOTS
+                ));
+            }
             wei(&r.amount)?;
         }
         for url in self.urls() {
@@ -343,6 +355,9 @@ impl Config {
         }
         if let Some(r) = &self.release {
             urls.push(r.queue_url.clone());
+            if !r.defend_url.is_empty() {
+                urls.push(r.defend_url.clone());
+            }
             urls.extend(r.rpcs.iter().cloned());
         }
         urls

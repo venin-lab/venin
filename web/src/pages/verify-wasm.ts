@@ -1,4 +1,4 @@
-import init, { gate, mutate, replay, scan, verify } from "../wasm/venin_core.js";
+import init, { defend_gate, gate, mutate, replay, scan, verify } from "../wasm/venin_core.js";
 
 let ready: Promise<unknown> | null = null;
 
@@ -6,7 +6,7 @@ let ready: Promise<unknown> | null = null;
 export async function core() {
   ready ??= init();
   await ready;
-  return { verify, replay, scan, gate, mutate };
+  return { verify, replay, scan, gate, mutate, defend_gate };
 }
 
 export interface RowRate {

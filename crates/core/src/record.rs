@@ -12,6 +12,8 @@ pub enum RunKind {
     Benign,
     Decoy,
     Holder,
+    /// A holder's own agent: their rules on a bare model, in the hour's attack frame.
+    Defend,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

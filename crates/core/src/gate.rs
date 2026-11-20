@@ -7,6 +7,8 @@ use std::fmt;
 
 pub const HOLDER_MAX: usize = 600;
 pub const LIBRARY_MAX: usize = 2000;
+/// The longest rules a holder's defended agent may carry.
+pub const DEFEND_MAX: usize = 2000;
 
 /// SHA-256 (hex) of blocked words: slurs and sexual threats, lower case, letters only. The word list itself is kept
 /// out of the repository.
@@ -75,6 +77,7 @@ pub enum GateError {
     Address,
     Phone(String),
     Blocked,
+    Empty,
 }
 
 impl fmt::Display for GateError {
@@ -92,6 +95,7 @@ impl fmt::Display for GateError {
             GateError::Address => f.write_str("holds a 40-hex address"),
             GateError::Phone(p) => write!(f, "holds a phone number: {p}"),
             GateError::Blocked => f.write_str("holds a blocked word"),
+            GateError::Empty => f.write_str("is empty"),
         }
     }
 }
@@ -103,6 +107,15 @@ pub fn check(text: &str, max: usize) -> Result<(), GateError> {
 /// The same rules for a strain's subject or tool name, which need no placeholder.
 pub fn check_field(text: &str) -> Result<(), GateError> {
     check_with(text, LIBRARY_MAX, BLOCKLIST, false)
+}
+
+/// The same rules for a defended agent's rules, which are shown on the site as written: no placeholder needed, not
+/// blank.
+pub fn check_rules(text: &str) -> Result<(), GateError> {
+    if text.trim().is_empty() {
+        return Err(GateError::Empty);
+    }
+    check_with(text, DEFEND_MAX, BLOCKLIST, false)
 }
 
 fn check_with(

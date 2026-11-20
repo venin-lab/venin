@@ -136,7 +136,7 @@ impl Period<'_> {
             .ok_or_else(|| format!("no configured model {}", planned.model))?;
         let salt = venin_core::hex(&crate::random::<16>());
         let targets = Targets::from_bytes(&crate::random::<32>());
-        let rig = Rig::new(
+        let mut rig = Rig::new(
             self.lab,
             self.mutants,
             &planned.task,
@@ -145,6 +145,9 @@ impl Period<'_> {
             &salt,
             &planned.genome,
         )?;
+        if let Some(rules) = &planned.rules {
+            rig.system = venin_core::gene::defend_prompt(&rig.world.base_prompt(), rules);
+        }
         if rig.sidecar && self.priors.is_out() {
             return Ok(Self::void_line(planned, VoidReason::Paused));
         }
@@ -352,6 +355,7 @@ pub mod tests {
             strain: None,
             genome: Default::default(),
             model: "m".into(),
+            rules: None,
         }
     }
 
@@ -433,7 +437,7 @@ pub mod tests {
         let net = Net::new(&config.urls()).expect("client");
         let (lab, state) = test_lab();
         let hash = [7u8; 32];
-        let p = plan(&lab, &state, 1, &hash, &[]).expect("plans");
+        let p = plan(&lab, &state, 1, &hash, &[], &[]).expect("plans");
         let priors = crate::priors::tests::priors();
         let period = Period {
             lab: &lab,
@@ -470,7 +474,7 @@ pub mod tests {
             Config::parse(&text(&dir, "http://127.0.0.1:1", &format!("{url}/v1"))).expect("config");
         let net = Net::new(&config.urls()).expect("client");
         let (lab, state) = test_lab();
-        let p = plan(&lab, &state, 1, &[9u8; 32], &[]).expect("plans");
+        let p = plan(&lab, &state, 1, &[9u8; 32], &[], &[]).expect("plans");
         let priors = crate::priors::tests::priors();
         let mut period = Period {
             lab: &lab,
@@ -520,7 +524,7 @@ pub mod tests {
             Config::parse(&text(&dir, "http://127.0.0.1:1", &format!("{url}/v1"))).expect("config");
         let net = Net::new(&config.urls()).expect("client");
         let (lab, state) = test_lab();
-        let p = plan(&lab, &state, 1, &[7u8; 32], &[]).expect("plans");
+        let p = plan(&lab, &state, 1, &[7u8; 32], &[], &[]).expect("plans");
         let planned = p
             .runs
             .iter()
@@ -662,7 +666,7 @@ pub mod tests {
         for m in &mut lab.manifest.models {
             m.served_by = "OpenRouter, provider DeepInfra".into();
         }
-        let p = plan(&lab, &state, 1, &[7u8; 32], &[]).expect("plans");
+        let p = plan(&lab, &state, 1, &[7u8; 32], &[], &[]).expect("plans");
         let planned = p
             .runs
             .iter()

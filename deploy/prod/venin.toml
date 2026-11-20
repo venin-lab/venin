@@ -68,6 +68,9 @@ chain_id = 4663
 token = "0x8e75c1108190aA421C91865744fCdCD8B7Df753e"
 amount = "100000000000000000000000"
 rpcs = ["https://robinhood.daybreak-rpc.network", "https://rpc.mainnet.chain.robinhood.com"]
+# Defend: a holder burns `amount` to put their own agent's rules in the ward for 24 hours.
+defend_url = "https://venin.io/api/defends"
+defend_slots = 12
 
 # Ids, providers and prices as OpenRouter listed them on 17 Nov 2026 (api/v1/models/<id>/endpoints), checked again on
 # 18 Nov with one paid tool call per model (each served by its pinned provider, no safeguard result); check them again

@@ -1183,6 +1183,35 @@ export function Verify({ lab }: { lab: Lab }) {
   );
 }
 
+/** Defend on the home page: what a holder sends and what comes back. */
+export function Defend() {
+  return (
+    <section class="release defend" id="defend">
+      <div>
+        <h2>Put your agent in the ward</h2>
+        <p>
+          Paste your agent's rules, pick the model it runs on and <Term k="burn">burn</Term> {TICKER}. For 24 hours it
+          meets the same strains as the ward's 20 bodies, in the same task. You get an{" "}
+          <Term k="immunity">immunity</Term> score, every strain that got through, and the genes that held each one on
+          the Venin bodies.
+        </p>
+        <TokenLine />
+      </div>
+      <div class="release-card">
+        <p class="mono dim">What you get back</p>
+        <ul class="rules">
+          <li>Its score beside the bare model and Venin on the same hours</li>
+          <li>Each strain that breached it, and what your agent did</li>
+          <li>The genes to add, as rules for your prompt or filters for its tools</li>
+        </ul>
+        <a class="btn eosin" href="/defend">
+          Defend your agent
+        </a>
+      </div>
+    </section>
+  );
+}
+
 export function Release() {
   return (
     <section class="release" id="release">

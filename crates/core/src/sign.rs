@@ -12,6 +12,14 @@ pub fn message(tx: &str, route: Route, payload_sha: &str, chain_id: u64) -> Stri
     )
 }
 
+/// The message a holder signs to put their agent in the ward; docs/RECORD.md, "Defend intake". `column` is the model's
+/// column (`m1` to `m4`).
+pub fn defend_message(tx: &str, column: &str, rules_sha: &str, chain_id: u64) -> String {
+    format!(
+        "Venin defend\nburn: {tx}\nmodel: {column}\nrules-sha256: {rules_sha}\nchain: {chain_id}"
+    )
+}
+
 fn keccak(bytes: &[u8]) -> [u8; 32] {
     Keccak256::digest(bytes).into()
 }

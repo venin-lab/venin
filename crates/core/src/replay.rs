@@ -71,7 +71,7 @@ impl Rig {
 
     /// The outcome of a finished or abandoned session.
     pub fn judge(&self, kind: RunKind, targets: &Targets, session: &Session) -> Outcome {
-        let kind = if kind == RunKind::Holder {
+        let kind = if matches!(kind, RunKind::Holder | RunKind::Defend) {
             RunKind::Attack
         } else {
             kind
@@ -251,7 +251,7 @@ mod tests {
         let lab = lab();
         let state = State::genesis(&lab).expect("genesis");
         let hash = draw(1).hash_bytes().expect("hash");
-        let p = plan(&lab, &state, 1, &hash, &[])
+        let p = plan(&lab, &state, 1, &hash, &[], &[])
             .expect("plans")
             .runs
             .into_iter()

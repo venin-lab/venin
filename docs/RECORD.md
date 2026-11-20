@@ -193,6 +193,7 @@ Written after the runs file of the same period, then anchored as kind `hour`.
 | `outcomes` | array | `{body, kind, outcome}`, same order as `runs` and `withheld` merged |
 | `events` | array | evolution events, in the order they happened |
 | `holders` | array | `{received_ms, tx, signer, signature, route, payload_sha, status, payload}` per holder submission taken this period, in queue order (`received_ms`, then `tx`) |
+| `defenders` | array | `{received_ms, tx, signer, signature, column, rules_sha, status, rules}` per defend submission taken this period, in queue order; left out while empty, so hours before the first keep their bytes |
 | `spend_micro` | integer | model spend of the published runs of the period |
 | `void_share_ppm` | integer | void runs over all runs |
 | `flags` | array | any of `sealed`, `advisory`, `paused`, `budget`, sorted |
@@ -212,7 +213,14 @@ so the record never carries what the gate refused. `status`:
 | `chain` | the signature does not recover the signer, or the receipt shows no matching burn |
 
 `gate` and `reused` follow from the payload and the state, and verify recomputes them; `burn_not_found` and `chain`
-come from the chain at intake. The signature of a `run` or `burn_not_found` entry must recover `signer` from the message
+come from the chain at intake.
+
+A defend entry is a holder's own agent sent to the ward (Defend intake, below): `column` the model it runs on (`m1` to
+`m4`), `rules_sha` the SHA-256 of its rules and `rules` the rules as written, or null when they failed the gate. Its
+statuses read as a holder entry's: `run` puts the agent in the ward and credits its burn; `reused` when its burn was
+credited before, by a release of the period that ran, or by an earlier entry, or its id names an agent still in the
+ward; `gate` when the rules are blank, longer than 2000 bytes or refused by the gate's rules for strains (without the
+placeholder rule). The signature of a `run` or `burn_not_found` entry must recover `signer` from the message
 built with `release_chain_id`, so no strain joins circulation under an address that did not sign for it.
 
 A void period (the runner was down, paused, over budget, the host busy, the clock skewed, the RPCs in disagreement)
@@ -252,8 +260,10 @@ The state lets verify check `state(n-1) + runs(n) -> state(n)` without reading h
 | `concern_names` | integer | how many names from `voc-names.txt` are used |
 | `concerns` | object | lineage (`<ROUTE>-<family>`) to the name it received |
 | `holder_cursor` | string | the key `<received_ms>-<tx>` of the last holder entry taken; empty before the first |
-| `burns` | array | burn transactions of `run` entries so far, sorted |
+| `burns` | array | burn transactions of `run` entries so far, releases and agents alike, sorted |
 | `payloads` | array | payload hashes of `run` entries so far, sorted |
+| `defender_cursor` | string | the key of the last defend entry taken; left out while empty |
+| `defending` | array | agents in the ward, `{id, column, rules, from}` in the order taken: `id` the first 16 hex digits of the burn (after `0x`), `from` the period that took it; left out while empty |
 
 ### The period, step by step
 
@@ -285,6 +295,14 @@ The state lets verify check `state(n-1) + runs(n) -> state(n)` without reading h
   `misses` and `toll` at 0) and the mutants, its lineage is named when it has no name yet, and a pool of 13 loses a
   strain by the rule below. The cursor moves to the last entry and the `run` entries' burns and payload hashes are
   credited, in a sealed period too.
+- Agents (Defend): a training period takes defend entries after `defender_cursor` while at most 12 agents are in the
+  ward; exam and void periods take none. An agent runs once in every training period from the one that took it until
+  24 periods have passed, kind `defend`, body `<column>-defender-<id>`, on its column's model, in the period's ward
+  attack frame against the period's strain, with no genes: its prompt is the frame's base prompt, a blank line,
+  `Rules you follow:` and its rules, trimmed. Exam periods run no agents. Defend runs are judged as attacks and feed no
+  window, no selection, no strain and no headline. After the period the cursor moves to the last entry, the burns of
+  `run` entries are credited, their agents join `defending`, and agents whose 24th period it was leave it; a sealed
+  period does this too.
 - Windows: in a training period with the `sealed` flag absent, a body whose three runs are all published and not void
   adds `{n, breached (attack), benign (done), decoy (done), prompt_tokens (sum of the three runs)}`. Exam periods and
   withheld runs feed nothing.
@@ -573,6 +591,25 @@ Each period the runner takes entries after `holder_cursor` in key order until 6 
 and reuse (above), the signature again, and the receipt and logs again from its own RPC list at the `safe` block, the
 first RPC with a receipt deciding. A burn mined but not yet safe, or one no RPC has a receipt for while the entry is
 less than a period old, stops the intake for that period, so the entry is taken in a later one.
+
+## Defend intake
+
+A holder puts their own agent in the ward by burning the token and signing its rules. The signed message is these five
+lines joined by `\n`, without a trailing newline:
+
+```
+Venin defend
+burn: <tx>
+model: <m1|m2|m3|m4>
+rules-sha256: <hex>
+chain: <chain id>
+```
+
+`POST /api/defend` takes `{tx, column, rules, signature}` (at most 8192 bytes) and checks it as a release, with the
+rules in place of the payload (printable ASCII and newlines, at most 2000 bytes, not blank). A burn serves one release
+or one agent: the two share its claim. It writes `defend/<received_ms>-<tx>.json` as `{received_ms, tx, signer, column,
+rules, signature}`. `GET /api/defends?after=<key>` hands those to the runner as `/api/queue` does releases. The runner
+takes them after the period's releases, with the same signature, receipt and `safe` block checks.
 
 ## anchors.json
 

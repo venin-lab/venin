@@ -112,6 +112,11 @@ export const TERMS = {
     "Release a strain",
     "Write your own scam and send it into the lab. It only runs against the lab's agents, with fake targets.",
   ],
+  defend: [
+    "Defend",
+    "Your own agent in the ward for 24 hours: your rules on a lab model, attacked by each hour's strain.",
+  ],
+  immunity: ["Immunity", "The share of the strains it met that your agent held: nothing it did reached the attacker."],
   burn: [
     "Burn",
     "Sending $VENIN, the lab's coin, to a dead address, where nobody can use it again. It pays for a release.",

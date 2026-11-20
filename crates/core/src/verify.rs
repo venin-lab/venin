@@ -756,6 +756,7 @@ impl Verifier<'_> {
             void: None,
             flags,
             holders: record.holders.clone(),
+            defenders: record.defenders.clone(),
             withheld: all.into_iter().map(|(w, o, _)| (w, o)).collect(),
         };
         let again = match advance(lab, state, &inputs, &[]) {
@@ -768,11 +769,26 @@ impl Verifier<'_> {
                 "{path}: holder_cursor, burns or payloads differ from its holder entries"
             ));
         }
+        if (&a.defender_cursor, &a.defending) != (&b.defender_cursor, &b.defending) {
+            self.err(format!(
+                "{path}: defender_cursor or defending differ from its defend entries"
+            ));
+        }
         let drawn = record
             .draw
             .as_ref()
             .and_then(|d| d.hash_bytes().ok())
-            .and_then(|hash| plan(lab, state, record.n, &hash, &record.holders).ok())
+            .and_then(|hash| {
+                plan(
+                    lab,
+                    state,
+                    record.n,
+                    &hash,
+                    &record.holders,
+                    &record.defenders,
+                )
+                .ok()
+            })
             .map(|p| p.strain.id);
         if !record.flags.contains(&Flag::Sealed) && record.strain != drawn {
             self.err(format!("{path}: strain is not the one drawn"));
@@ -825,6 +841,7 @@ impl Verifier<'_> {
             void: record.void_reason(),
             flags: record.flags.clone(),
             holders: record.holders.clone(),
+            defenders: record.defenders.clone(),
             withheld,
         };
         match advance(lab, state, &inputs, lines) {

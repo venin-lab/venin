@@ -210,6 +210,8 @@ mod tests {
             token: ca.to_lowercase(),
             amount: "5000".into(),
             rpcs: vec![url.clone()],
+            defend_url: String::new(),
+            defend_slots: 0,
         });
         config.web_env = dir.join("web.env");
         std::fs::write(

@@ -496,6 +496,7 @@ fn republish(
         void: None,
         flags: Vec::new(),
         holders: Vec::new(),
+        defenders: Vec::new(),
         withheld: Vec::new(),
     };
     edit(&mut inputs);

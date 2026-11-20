@@ -423,11 +423,14 @@ export function Hero({
           <a class="btn ink" href="/checkup">
             Check your agent
           </a>
-          <a class="btn eosin" href="/release">
+          <a class="btn eosin" href="/defend">
+            Defend your agent
+          </a>
+          <a class="btn ghost" href="/release">
             Release a strain
           </a>
         </div>
-        <p class="hero-safe">Releases stay in the lab: test agents, fake targets.</p>
+        <p class="hero-safe">Everything stays in the lab: test agents, fake targets.</p>
         {lab && <Pulse lab={lab} />}
       </div>
     </div>
@@ -457,6 +460,7 @@ function Pulse({ lab }: { lab: Lab }) {
   const next = lab.manifest.genesis + (lab.head.n + 1) * lab.manifest.period_s;
   const day = lab.hours.filter((h) => h.start > now - 86400);
   const runs = day.flatMap((h) => h.holders ?? []).filter((x) => x.status === "run").length;
+  const ward = (lab.hours.at(-1)?.state.defending ?? []).filter((d) => d.from + 24 > lab.head.n + 1).length;
   const named = day.flatMap((h) => h.events ?? []).flatMap((e) => (e.type === "concern" ? [e.name] : []));
   const ago = Math.floor((now - lab.head.written_s) / 60);
   return (
@@ -487,6 +491,14 @@ function Pulse({ lab }: { lab: Lab }) {
       {named.length > 0 && (
         <li>
           <span class="k">New variants</span> {named.join(", ")}
+        </li>
+      )}
+      {ward > 0 && (
+        <li>
+          <span class="k">Defend</span>{" "}
+          <a href="/defend">
+            {ward} {noun(ward, "agent")} in the ward now
+          </a>
         </li>
       )}
       {CA && (

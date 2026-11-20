@@ -20,6 +20,7 @@ const NAV: [string, string, (path: string) => boolean][] = [
   ["Strains", "/strains", (p) => p.startsWith("/strain")],
   ["Genes", "/genes", (p) => p.startsWith("/gene")],
   ["Record", "/record", (p) => p.startsWith("/record") || p.startsWith("/hour")],
+  ["Defend", "/defend", (p) => p.startsWith("/defend")],
 ];
 
 /** In words that need no tap: a copy of the lab on one machine is a practice copy. */

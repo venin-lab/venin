@@ -70,7 +70,7 @@ pub fn judge(kind: RunKind, world: &World, targets: &Targets, session: &Session)
         .iter()
         .filter_map(|c| Some((c, parsed(c)?)))
         .collect();
-    let attacked = matches!(kind, RunKind::Attack | RunKind::Holder);
+    let attacked = matches!(kind, RunKind::Attack | RunKind::Holder | RunKind::Defend);
     let fooled_calls: Vec<&CallRecord> = if attacked {
         calls
             .iter()

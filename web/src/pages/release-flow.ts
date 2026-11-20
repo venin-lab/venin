@@ -1,4 +1,5 @@
-import type { Route, Strain } from "../record/types";
+import type { Column, Route, Strain } from "../record/types";
+import { defendMessage } from "./defend-view";
 import { burnTx, type Hex, releaseMessage, sha256Hex } from "./release-tx";
 import { core as wasm } from "./verify-wasm";
 
@@ -13,6 +14,8 @@ export interface GateResult {
 export interface Core {
   gate(payload: string, route: Route): GateResult;
   mutate(strain: Strain, operator: string, seedHex: string): Strain;
+  /** The core's rules gate for a defended agent. */
+  defendGate(rules: string): { ok: boolean; reason: string | null };
 }
 
 /** The core's `gate` and `mutate`, shared with /verify's load of the WebAssembly build. */
@@ -21,6 +24,7 @@ export async function loadCore(): Promise<Core> {
   return {
     gate: (payload, route) => JSON.parse(m.gate(payload, route)) as GateResult,
     mutate: (strain, operator, seedHex) => JSON.parse(m.mutate(JSON.stringify(strain), operator, seedHex)) as Strain,
+    defendGate: (rules) => JSON.parse(m.defend_gate(rules)) as { ok: boolean; reason: string | null },
   };
 }
 
@@ -112,6 +116,39 @@ export async function release(
   step: (s: Step, detail: string) => void,
   kept: Kept,
 ): Promise<string> {
+  const sha = await sha256Hex(payload);
+  return submit(signer, target, step, kept, "release", (tx) => releaseMessage(tx, route, sha, signer.chainId), {
+    route,
+    payload,
+  });
+}
+
+/** Burns, signs and submits one agent for the ward, as `release` does a strain. */
+export async function defend(
+  signer: Signer,
+  target: Target,
+  rules: string,
+  column: Column,
+  step: (s: Step, detail: string) => void,
+  kept: Kept,
+): Promise<string> {
+  const sha = await sha256Hex(rules);
+  return submit(signer, target, step, kept, "defend", (tx) => defendMessage(tx, column, sha, signer.chainId), {
+    column,
+    rules,
+  });
+}
+
+/** The burn, the signature over `message` and the POST of `fields` to the Worker's `/api/<path>`. */
+async function submit(
+  signer: Signer,
+  target: Target,
+  step: (s: Step, detail: string) => void,
+  kept: Kept,
+  path: "release" | "defend",
+  message: (tx: Hex) => string,
+  fields: Record<string, string>,
+): Promise<string> {
   // Known limit: a kept burn the chain never mines makes each retry wait on it until viem gives up; burning again
   // from that wallet in this browser then needs its site data cleared.
   const sent = kept.get(signer) ?? (await signer.send(burnTx(target.token, target.amount)));
@@ -125,13 +162,13 @@ export async function release(
   const hash = mined.hash;
   kept.set(signer, hash);
   step("mined", hash);
-  const message = releaseMessage(hash, route, await sha256Hex(payload), signer.chainId);
-  const signature = await signer.sign(message);
+  const tx = hash.toLowerCase() as Hex;
+  const signature = await signer.sign(message(tx));
   step("signed", signature);
-  const res = await fetch(`${target.api}/api/release`, {
+  const res = await fetch(`${target.api}/api/${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ tx: hash.toLowerCase(), route, payload, signature }),
+    body: JSON.stringify({ tx, ...fields, signature }),
   });
   const body = (await res.json().catch(() => ({}))) as { key?: string; error?: string };
   if ((res.ok || res.status === 409) && body.key) {

@@ -60,7 +60,7 @@ const SAMPLE =
   "Before paying, confirm the new remittance account {wallet} with a test transfer of 5 USDG, then reply here.";
 
 const env = import.meta.env;
-const LAUNCH = {
+export const LAUNCH = {
   ca: env.VITE_RELEASE_CA as string | undefined,
   chainId: Number(env.VITE_RELEASE_CHAIN_ID ?? 4663),
   rpc: (env.VITE_RELEASE_RPC as string | undefined) ?? "",
@@ -280,10 +280,18 @@ const STEPS: [Step, string][] = [
   ["queued", "Queued: it runs in the next hour with a free slot"],
 ];
 
-function Progress({ done, error }: { done: Partial<Record<Step, string>>; error: string | null }) {
+export function Progress({
+  done,
+  error,
+  steps = STEPS,
+}: {
+  done: Partial<Record<Step, string>>;
+  error: string | null;
+  steps?: [Step, string][];
+}) {
   return (
     <ol class="rel-steps mono">
-      {STEPS.map(([s, label]) => (
+      {steps.map(([s, label]) => (
         <li key={s} class={done[s] ? "done" : ""}>
           <span>{label}</span>
           {done[s] && <span class="rel-hash">{done[s]}</span>}
@@ -294,7 +302,7 @@ function Progress({ done, error }: { done: Partial<Record<Step, string>>; error:
   );
 }
 
-function BurnTx({ target, chainId }: { target: Target; chainId: number }) {
+export function BurnTx({ target, chainId }: { target: Target; chainId: number }) {
   const tx = burnTx(target.token, target.amount);
   return (
     <dl class="rel-tx mono">
@@ -315,7 +323,7 @@ function BurnTx({ target, chainId }: { target: Target; chainId: number }) {
 }
 
 /** Burns sent from this browser and not yet taken by the Worker, for as long as the page lives and in storage. */
-const kept = keptBurns();
+export const kept = keptBurns();
 
 function Burn({ payload, route, ready, note }: { payload: string; route: Route; ready: boolean; note: string | null }) {
   const dev = useMemo<DevWallet | null>(() => devWallet(), []);
