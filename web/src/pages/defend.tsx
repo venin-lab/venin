@@ -631,6 +631,11 @@ export function DefendResult({ lab, id }: { lab: Lab; id: string }) {
           {s.lost ? ` ${s.lost} of its hours did not count (void or sealed).` : ""}
         </p>
         {meta}
+        <div class="actions">
+          <a class="btn eosin" href="/defend">
+            Put your agent in the ward
+          </a>
+        </div>
       </header>
 
       <section class="def-score" aria-label="Its result beside the ward's bodies on the same model">
