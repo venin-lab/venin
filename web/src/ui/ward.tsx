@@ -11,8 +11,8 @@ import { type Bed, type Figure, figureState, type OnScreen, placeOnBed, Ward } f
 import { explain } from "./explain";
 import { Ledger } from "./ledger";
 import { navigate } from "./router";
-import { DOT, firstLine, startsAt, TokenLine } from "./sections";
-import { Term, type TermKey } from "./terms";
+import { CA, countdown, DOT, Explore, firstLine, startsAt, TokenLine } from "./sections";
+import { Term, type TermKey, TICKER } from "./terms";
 
 /**
  * `opened` once the opening has played in this page load. `open`: the patient the ward just opened, as it will be on
@@ -297,7 +297,7 @@ export function WardStage({ lab, hour, setHour }: { lab: Lab; hour: number; setH
   return (
     <section id="ward" class={`stage ${phase}`} ref={stage}>
       <canvas class="stage-canvas" ref={canvas} />
-      <Hero agents={bodies.length} line={heroLine(lab, latest)} />
+      <Hero agents={bodies.length} line={heroLine(lab, latest)} lab={lab} />
       <WardGrid
         lab={lab}
         record={record}
@@ -361,7 +361,17 @@ export function PendingStage({ manifest, now }: { manifest: Manifest; now: numbe
  * `line` null (the record still loading) the line says so; everything else needs no data, so it paints at once.
  * `idle`: the lab has not started, so its beat is an empty ring that does not pulse.
  */
-export function Hero({ agents, line, idle = false }: { agents: number; line: string | null; idle?: boolean }) {
+export function Hero({
+  agents,
+  line,
+  idle = false,
+  lab,
+}: {
+  agents: number;
+  line: string | null;
+  idle?: boolean;
+  lab?: Lab;
+}) {
   const parts = line ? line.split(` ${DOT} `) : ["Reading the record"];
   const last = parts.length - 1;
   return (
@@ -418,8 +428,76 @@ export function Hero({ agents, line, idle = false }: { agents: number; line: str
           </a>
         </div>
         <p class="hero-safe">Releases stay in the lab: test agents, fake targets.</p>
+        {lab && <Pulse lab={lab} />}
       </div>
     </div>
+  );
+}
+
+/** One release's burn in whole tokens, from the build; 0 when the build has none, and the burn line is left out. */
+const BURN = BigInt((import.meta.env.VITE_RELEASE_AMOUNT as string | undefined) || "0") / 10n ** 18n;
+
+/** Seconds since the epoch, read again every second while mounted. */
+function useClock(): number {
+  const [now, setNow] = useState(() => Date.now() / 1000);
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now() / 1000), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return now;
+}
+
+/**
+ * The lab's pulse under the actions, all read from the record: the last hour on chain with its anchor, the next draw,
+ * and the last day's releases, their burns and the variants of concern the ward named.
+ */
+function Pulse({ lab }: { lab: Lab }) {
+  const now = useClock();
+  const anchor = [...lab.anchors].reverse().find((a) => a.kind === "hour");
+  const next = lab.manifest.genesis + (lab.head.n + 1) * lab.manifest.period_s;
+  const day = lab.hours.filter((h) => h.start > now - 86400);
+  const runs = day.flatMap((h) => h.holders ?? []).filter((x) => x.status === "run").length;
+  const named = day.flatMap((h) => h.events ?? []).flatMap((e) => (e.type === "concern" ? [e.name] : []));
+  const ago = Math.floor((now - lab.head.written_s) / 60);
+  return (
+    <ul class="pulse mono">
+      <li>
+        <span class="k">On chain</span> hour {lab.head.n}, {ago < 1 ? "this minute" : `${ago} min ago`}
+        {anchor && (
+          <>
+            {" "}
+            {DOT}{" "}
+            <Explore chain={4663} path={`tx/${anchor.tx}`}>
+              <span class="hex">
+                tx {anchor.tx.slice(0, 8)}...{anchor.tx.slice(-4)}
+              </span>
+            </Explore>
+          </>
+        )}
+      </li>
+      <li>
+        <span class="k">Next draw</span> {next > now ? `in ${countdown(next - now)}` : "now"}
+      </li>
+      {runs > 0 && (
+        <li>
+          <span class="k">Last 24 h</span> {runs} {noun(runs, "release")}
+          {BURN > 0n && ` ${DOT} ${(BigInt(runs) * BURN).toLocaleString("en-US")} ${TICKER} burned`}
+        </li>
+      )}
+      {named.length > 0 && (
+        <li>
+          <span class="k">New variants</span> {named.join(", ")}
+        </li>
+      )}
+      {CA && (
+        <li>
+          <span class="k">Trading</span> Uniswap {DOT}{" "}
+          <a href={`https://dexscreener.com/robinhood/${CA}`} target="_blank" rel="noopener noreferrer">
+            chart
+          </a>
+        </li>
+      )}
+    </ul>
   );
 }
 

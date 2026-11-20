@@ -508,6 +508,35 @@ a:focus-visible {
     text-align: left;
   }
 }
+/* The pulse: the last hour on chain, the next draw and the last day, read from the record. */
+.pulse {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-align: right;
+}
+.pulse .k {
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-right: 4px;
+}
+.pulse a {
+  color: inherit;
+  text-underline-offset: 2px;
+}
+.pulse .hex {
+  text-transform: none;
+}
+@media (max-width: 1000px) {
+  .pulse {
+    text-align: left;
+  }
+}
 /* The lab is live: a resting heart, two soft beats and a long pause every 2.4 s, not a blinking light. */
 .beat {
   display: inline-block;
