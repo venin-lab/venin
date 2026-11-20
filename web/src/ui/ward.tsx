@@ -3,7 +3,6 @@ import type { Lab } from "../record/load";
 import { type BodyState, findStrain, focal, heldBy, noun, ROW_LABEL, ROWS } from "../record/stats";
 import type { HourRecord, Manifest, Row } from "../record/types";
 import { hourState } from "../record/views";
-import { TokenLine } from "./sections";
 import { type Anatomy, buildCloud, type Cloud, loadAnatomy } from "../three/anatomy";
 import { warmBody } from "../three/body";
 import { reachTime } from "../three/ink";
@@ -12,7 +11,7 @@ import { type Bed, type Figure, figureState, type OnScreen, placeOnBed, Ward } f
 import { explain } from "./explain";
 import { Ledger } from "./ledger";
 import { navigate } from "./router";
-import { DOT, firstLine, startsAt } from "./sections";
+import { DOT, firstLine, startsAt, TokenLine } from "./sections";
 import { Term, type TermKey } from "./terms";
 
 /**

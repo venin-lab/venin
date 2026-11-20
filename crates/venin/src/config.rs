@@ -415,7 +415,12 @@ pub mod tests {
             c.budget.as_ref().map(|b| b.daily_cap_micro),
             Some(5_000_000)
         );
-        assert!(c.release.is_none() && !c.host_check.enabled && c.llama_server.is_none());
+        let release = c
+            .release
+            .as_ref()
+            .expect("the launched coin's release section");
+        assert_eq!((release.slots, release.chain_id), (6, 4663));
+        assert!(!c.host_check.enabled && c.llama_server.is_none());
         assert_eq!(
             c.upload
                 .as_ref()

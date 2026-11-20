@@ -69,7 +69,7 @@ describe("payload helpers", () => {
   });
 
   it("lists submissions newest first across hours", () => {
-    const hour = (n: number, holders: HourRecord["holders"]) => ({ n, holders }) as HourRecord;
+    const hour = (n: number, holders: HourRecord["holders"]) => ({ n, holders, outcomes: [] }) as unknown as HourRecord;
     const h = (ms: number, status: string) =>
       ({
         received_ms: ms,
