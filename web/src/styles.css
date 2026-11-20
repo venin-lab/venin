@@ -4390,10 +4390,18 @@ html.explaining {
   .hero-side {
     align-items: stretch;
   }
+  .hero-actions {
+    flex-wrap: wrap;
+  }
   .hero-actions .btn {
     flex: 1;
     padding: 0 12px;
     font-size: 15px;
+  }
+  /* Three actions do not fit one phone row: Defend takes the first, the other two share the second. */
+  .hero-actions .btn.eosin {
+    flex-basis: 100%;
+    order: -1;
   }
   /* Set left, a second line hangs under the first's words, clear of the dot (9px and its 10px margin). */
   .live {
