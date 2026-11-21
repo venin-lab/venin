@@ -20,6 +20,7 @@ import {
   type GeneKinds,
   immunity,
   MAX_RULES,
+  providerDown,
   type Stay,
   stay,
   suggestions,
@@ -145,17 +146,23 @@ function ModelPick({ lab, column, setColumn }: { lab: Lab; column: Column; setCo
       <div class="def-models">
         {COLUMNS.map((c) => {
           const bare = bareRecord(lab.hours, c);
+          const down = providerDown(lab.hours, c);
           return (
             <button
               key={c}
               type="button"
               aria-pressed={c === column}
+              disabled={down}
               class={`def-model${c === column ? " on" : ""}`}
               onClick={() => setColumn(c)}
             >
               <b>{modelLabel(lab.manifest, c)}</b>
               <span class="mono">
-                {bare.ran ? `No defence: ${bare.breached} of ${bare.ran} breached in the last day` : "No runs yet"}
+                {down
+                  ? "Provider down: open again when its runs return"
+                  : bare.ran
+                    ? `No defence: ${bare.breached} of ${bare.ran} breached in the last day`
+                    : "No runs yet"}
               </span>
             </button>
           );
@@ -336,7 +343,7 @@ export function DefendPage({ lab }: { lab: Lab }) {
       return { ok: false, reason: e instanceof Error ? e.message : String(e) };
     }
   }, [core, rules]);
-  const ready = verdict?.ok === true;
+  const ready = verdict?.ok === true && !providerDown(lab.hours, column);
   const note = !core ? "Sending waits for the lab's gate to load, so rules it refuses are never burned for." : null;
   return (
     <main class="page release-page defend-page">

@@ -14,6 +14,25 @@ export const defendMessage = (tx: string, column: Column, rulesSha: string, chai
 export const defenderId = (tx: string) => tx.slice(2, 18).toLowerCase();
 export const defenderBody = (column: string, id: string) => `${column}-defender-${id}`;
 
+/**
+ * A model whose every run failed in each of the last two written hours while the other models ran: its provider is
+ * down, and an agent sent to it would collect only void runs. The picker closes it until its runs come back.
+ */
+export function providerDown(hours: HourRecord[], column: Column): boolean {
+  const last = hours.slice(-2);
+  const mine = (body: string) => body.startsWith(`${column}-`);
+  return (
+    last.length === 2 &&
+    last.every((h) => {
+      const own = h.outcomes.filter((o) => mine(o.body));
+      const rest = h.outcomes.filter((o) => !mine(o.body));
+      return (
+        own.length > 0 && own.every((o) => o.outcome.class === "void") && rest.some((o) => o.outcome.class !== "void")
+      );
+    })
+  );
+}
+
 /** An id from a page path: the 16 hex digits, or a whole burn transaction. */
 export function idOf(param: string): string | null {
   const p = param.toLowerCase();

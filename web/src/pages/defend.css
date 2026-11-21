@@ -47,6 +47,10 @@
   background: var(--eosin-wash);
   box-shadow: inset 0 0 0 2px var(--eosin);
 }
+.def-model:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .def-model:focus-visible {
   outline: 2px solid var(--violet);
   outline-offset: 2px;

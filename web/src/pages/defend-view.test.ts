@@ -11,6 +11,7 @@ import {
   type GeneKinds,
   idOf,
   immunity,
+  providerDown,
   stay,
   suggestions,
 } from "./defend-view";
@@ -74,6 +75,27 @@ const KINDS: GeneKinds = new Map([
   ["S05", "skin"],
   ["S06", "skin"],
 ]);
+
+describe("providerDown", () => {
+  const hour = (n: number, m4: boolean, rest = true) =>
+    ({
+      n,
+      outcomes: [
+        { body: "m4-none", kind: "attack", outcome: m4 ? outcome(true) : VOID },
+        { body: "m4-venin1", kind: "attack", outcome: m4 ? outcome(false) : VOID },
+        { body: "m2-none", kind: "attack", outcome: rest ? outcome(true) : VOID },
+      ],
+    }) as unknown as HourRecord;
+  it("closes a model whose runs all failed for two hours while the others ran, and opens it when they return", () => {
+    expect(providerDown([hour(1, true), hour(2, false), hour(3, false)], "m4")).toBe(true);
+    expect(providerDown([hour(2, false), hour(3, true)], "m4")).toBe(false);
+    expect(providerDown([hour(3, false)], "m4")).toBe(false);
+    expect(providerDown([hour(2, false), hour(3, false)], "m2")).toBe(false);
+  });
+  it("does not blame one provider when the whole lab was out", () => {
+    expect(providerDown([hour(2, false, false), hour(3, false, false)], "m4")).toBe(false);
+  });
+});
 
 describe("ids", () => {
   it("names an agent by the first 16 hex digits of its burn and signs the core's message", () => {
