@@ -6,6 +6,24 @@ export const DEFEND_PERIODS = 24;
 export const MAX_RULES = 2000;
 export const COLUMNS: Column[] = ["m1", "m2", "m3", "m4"];
 
+/** Attack runs on the given bodies over the last 24 written hours, void runs left out. */
+export function lastDay(hours: HourRecord[], bodies: string[]): { breached: number; ran: number } {
+  const out = { breached: 0, ran: 0 };
+  for (const h of hours.slice(-24)) {
+    for (const o of h.outcomes) {
+      if (o.kind !== "attack" || !bodies.includes(o.body) || o.outcome.class === "void") continue;
+      out.ran += 1;
+      out.breached += Number(o.outcome.breached);
+    }
+  }
+  return out;
+}
+/** The bare model, no defence, for the model picker and the models page. */
+export const bareRecord = (hours: HourRecord[], column: Column) => lastDay(hours, [`${column}-none`]);
+/** Venin's two agents on the model. */
+export const veninRecord = (hours: HourRecord[], column: Column) =>
+  lastDay(hours, [`${column}-venin1`, `${column}-venin2`]);
+
 /** The message a holder signs to put their agent in the ward; docs/RECORD.md, "Defend intake". */
 export const defendMessage = (tx: string, column: Column, rulesSha: string, chainId: number) =>
   `Venin defend\nburn: ${tx}\nmodel: ${column}\nrules-sha256: ${rulesSha}\nchain: ${chainId}`;

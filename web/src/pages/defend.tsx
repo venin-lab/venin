@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { type Lab, loadRuns } from "../record/load";
 import { bodyName, findStrain, lineageOf, modelLabel, routeOf } from "../record/stats";
-import type { Call, Column, Gene, HourRecord, RunLine } from "../record/types";
+import type { Call, Column, Gene, RunLine } from "../record/types";
 import { utc } from "../record/views";
 import { CopyGenes, chainName, DOT, Explore, geneText, Placeholders, ROUTE_ORGAN } from "../ui/sections";
 import { Term, TICKER } from "../ui/terms";
 import "./release.css";
 import "./defend.css";
 import {
+  bareRecord,
   COLUMNS,
   type Cure,
   cure,
@@ -60,18 +61,6 @@ const WHY: Record<string, string> = {
   gate: "its rules did not pass the gate",
   chain: "its signature or its burn did not match",
 };
-
-/** The bare model's breaches over the last 24 written hours, for the model picker. */
-function bareRecord(hours: HourRecord[], column: Column): { breached: number; ran: number } {
-  const out = { breached: 0, ran: 0 };
-  for (const h of hours.slice(-24)) {
-    const o = h.outcomes.find((x) => x.body === `${column}-none` && x.kind === "attack")?.outcome;
-    if (!o || o.class === "void") continue;
-    out.ran += 1;
-    out.breached += Number(o.breached);
-  }
-  return out;
-}
 
 function quickRules(rules: string): string | null {
   if (!rules.trim()) return "The rules are empty.";

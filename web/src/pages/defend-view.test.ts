@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { HourRecord } from "../record/types";
 import {
+  bareRecord,
   cure,
   DEFEND_PERIODS,
   defenderBody,
@@ -11,9 +12,11 @@ import {
   type GeneKinds,
   idOf,
   immunity,
+  lastDay,
   providerDown,
   stay,
   suggestions,
+  veninRecord,
 } from "./defend-view";
 import { rpcList } from "./release-flow";
 
@@ -94,6 +97,17 @@ describe("providerDown", () => {
   });
   it("does not blame one provider when the whole lab was out", () => {
     expect(providerDown([hour(2, false, false), hour(3, false, false)], "m4")).toBe(false);
+  });
+});
+
+describe("lastDay", () => {
+  it("counts the last 24 hours' attack runs on the given bodies and leaves void runs out", () => {
+    const hours = record(30, []);
+    (hours[29] as unknown as { outcomes: { body: string; outcome: unknown }[] }).outcomes[0].outcome = VOID;
+    expect(bareRecord(hours, "m2")).toEqual({ breached: 23, ran: 23 });
+    expect(veninRecord(hours, "m2")).toEqual({ breached: 0, ran: 48 });
+    expect(lastDay(hours, ["m3-venin1"])).toEqual({ breached: 0, ran: 24 });
+    expect(bareRecord([], "m1")).toEqual({ breached: 0, ran: 0 });
   });
 });
 

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { CheckupPage } from "./pages/checkup";
 import { DefendPage, DefendResult } from "./pages/defend";
 import { idOf } from "./pages/defend-view";
+import { ModelsPage } from "./pages/models";
 import { ReleasePage } from "./pages/release";
 import { VerifyPage } from "./pages/verify";
 import { FirstHourPending, type Lab, loadLab } from "./record/load";
@@ -148,6 +149,7 @@ const PAGE = new Map([
   ["defend", "Defend your agent"],
   ["verify", "Verify"],
   ["checkup", "Check-up"],
+  ["models", "Both sides"],
 ]);
 
 /** What the tab says a page is, so history, bookmarks and a screen reader tell pages apart. */
@@ -213,6 +215,7 @@ function Routes({ lab, hour, setHour }: { lab: Lab; hour: number; setHour: (n: n
   if (agent) return <DefendResult key={agent} lab={lab} id={agent} />;
   if (route === "verify" && !id) return <VerifyPage lab={lab} />;
   if (route === "checkup" && !id) return <CheckupPage lab={lab} />;
+  if (route === "models" && !id) return <ModelsPage lab={lab} />;
   return <NotFound />;
 }
 

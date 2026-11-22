@@ -24,6 +24,7 @@ export function Footer() {
             <a href="/verify">Verify</a>
             <a href="/checkup">Check-up</a>
             <a href="/release">Release</a>
+            <a href="/models">Models</a>
             <a href="/defend">Defend</a>
           </nav>
         </div>
