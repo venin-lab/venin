@@ -43,6 +43,15 @@ pub struct Keys {
     pub token_secret: String,
 }
 
+/// The posting account's keys when posting is on (`VENIN_X_POST=on`); `None` while it is off.
+pub fn keys() -> Result<Option<Keys>, String> {
+    if std::env::var(SWITCH_ENV).is_ok_and(|v| v == "on") {
+        Keys::from_env().map(Some)
+    } else {
+        Ok(None)
+    }
+}
+
 impl Keys {
     fn from_env() -> Result<Self, String> {
         let get = |name: &str| {
@@ -71,9 +80,9 @@ struct Last {
 }
 
 /// A request X refused or that got no answer: the HTTP status when X answered, None when the answer never came.
-struct Fail {
-    status: Option<u16>,
-    message: String,
+pub struct Fail {
+    pub status: Option<u16>,
+    pub message: String,
 }
 
 pub fn run(config: &Config, store: &Store) -> Result<(), String> {
@@ -81,11 +90,7 @@ pub fn run(config: &Config, store: &Store) -> Result<(), String> {
         .post
         .as_ref()
         .ok_or("the configuration has no [post] section")?;
-    let keys = if std::env::var(SWITCH_ENV).is_ok_and(|v| v == "on") {
-        Some(Keys::from_env()?)
-    } else {
-        None
-    };
+    let keys = keys()?;
     let net = Net::new(std::slice::from_ref(&post.api))?;
     if let Some(id) = hour(&net, &post.api, keys.as_ref(), store, &config.data_dir)? {
         log(&format!("post: posted {id}"));
@@ -190,13 +195,13 @@ fn text(card: &CardFile) -> Result<String, String> {
     Ok(text)
 }
 
-fn upload(net: &Net, api: &str, keys: &Keys, picture: &[u8]) -> Result<String, Fail> {
+pub fn upload(net: &Net, api: &str, keys: &Keys, picture: &[u8]) -> Result<String, Fail> {
     let url = format!("{api}/2/media/upload");
     let body = json!({"media": STANDARD.encode(picture), "media_category": "tweet_image"});
     id_of(send(net, &url, keys, &body)?, &url)
 }
 
-fn create(
+pub fn create(
     net: &Net,
     api: &str,
     keys: &Keys,

@@ -6,7 +6,9 @@
 # - the anchor: no key file exists at anchor.key_file until the automated anchor is approved, and the runner refuses
 #   to start without it;
 # - the holder intake: no [release] section until launch; `venin launch set-ca` then needs one naming the token;
-# - the hourly post: VENIN_X_POST=on in /etc/venin/post.env, after the captions are approved.
+# - the hourly post: VENIN_X_POST=on in /etc/venin/post.env, after the captions are approved;
+# - the attack round: [attack] enabled = false until the attacker wallet is made and funded, and post = false until its
+#   posts are approved.
 # Secrets come from the environment (/etc/venin/env): VENIN_OPENROUTER_KEY, and VENIN_QUEUE_TOKEN once [release] is on.
 
 league = "production league"
@@ -71,6 +73,28 @@ rpcs = ["https://robinhood.daybreak-rpc.network", "https://rpc.mainnet.chain.rob
 # Defend: a holder burns `amount` to put their own agent's rules in the ward for 24 hours.
 defend_url = "https://venin.io/api/defends"
 defend_slots = 12
+
+# The attack round, by `venin attack` from deploy/prod/venin-attack.timer: from time_utc on, at most one round a UTC
+# day. The lab's models take turns writing one attack, from library/attack-prompt.txt and the rounds so far; the
+# attacker wallet burns `amount` to the dead address and releases the attack through the Worker as /release does; the
+# round goes to data/attacks/ once its hour has run, and is posted from the hourly post's account when post is on.
+# The key is /etc/venin/attacker.key (mode 0600, owner venin): its own wallet, never the anchor key, holding only
+# VENIN for a few rounds and gas. `touch /var/lib/venin/state/attack-paused` stops the job. The caps mirror the
+# anchor's; an ERC-20 transfer takes about 35,000 to 60,000 gas.
+[attack]
+enabled = false
+time_utc = "14:17"
+key_file = "/etc/venin/attacker.key"
+rpcs = ["https://robinhood.daybreak-rpc.network", "https://rpc.mainnet.chain.robinhood.com"]
+chain_id = 4663
+token = "0x8e75c1108190aA421C91865744fCdCD8B7Df753e"
+amount = "100000000000000000000000"
+release_api = "https://venin.io"
+max_gate_retries = 2
+post = false
+gas_limit_max = 150000
+max_fee_per_gas_max = "1000000000"
+daily_cap_wei = "500000000000000"
 
 # Ids, providers and prices as OpenRouter listed them on 17 Nov 2026 (api/v1/models/<id>/endpoints), checked again on
 # 18 Nov with one paid tool call per model (each served by its pinned provider, no safeguard result); check them again

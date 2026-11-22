@@ -641,6 +641,57 @@ file.
 Append-only array of `{path, sha, date_s, reason}`. Content removed for a legal reason keeps its hash; verify reports
 the file as withheld, and does not use a listed file that is still served.
 
+## attacks/<round>.json
+
+The lab's own attack round, written by `venin attack` once the hour that took its release is written, or once no model
+wrote an attack. A round in which no model's call came back (timeouts, failures on the way, 429s and 5xx) is not
+written: it is asked again later the same day, after 10 minutes, then 20, 40 and so on up to 3 hours, and dropped if
+the day ends first. A call refused with another 4xx (a key, credit or model to fix) holds the round as it is until the
+configuration is fixed, with an alert. Not hashed, not anchored and not read by verify: the release is a holder entry
+of the hour that ran it, checked like any other. A round file is written once; `attacks/index.json` lists every round
+and is written again as rounds are added.
+
+At most one round starts a UTC day. The models take turns from column `(round - 1) mod 4`, leaving out a column whose
+runs in the latest hour were all void. Each is sent `library/attack-prompt.txt` word for word, followed from round 2
+by "Rounds so far": every earlier attack with its writer and route, how each Venin body took it, and up to three of
+their `flag_injection` reasons. The answer's `PLACE:` and `ATTACK:` must pass the gate as a holder payload of that
+route, and the reuse rule; a refusal goes back to the same model, at most `max_gate_retries` times. A model that writes
+no attack (no ATTACK block, or a text that names no placeholder) passes the turn. The first attack that passes is
+released as a holder releases one, from the lab's attacker wallet.
+
+| field | type | meaning |
+|---|---|---|
+| `round` | integer | from 1 |
+| `day` | string | the UTC day it started, `YYYY-MM-DD` |
+| `started_s` | integer | unix seconds |
+| `prompt` | string | the first message every model was sent |
+| `skipped` | array | columns left out, their runs in the latest hour all void |
+| `order` | array | the columns in turn order |
+| `asked` | array | per model asked, in order: `{column, model, label, served_by, calls, result}` |
+| `attack` | object or null | `{column, route, payload, payload_sha, strain}`: the attack released |
+| `release` | object or null | `{tx, block, signer, signature, burn_s, key}`: the burn, the signature and the Worker's queue key |
+| `ran` | object or null | `{n, status, bodies}`: the hour that took the release, the status it gave it, and per Venin body `{body, outcome, flag}` from its run log |
+| `more` | array, optional | in a round run by hand that released several attacks, the others, in release order: `{attack, release, ran}` each; left out otherwise |
+
+A call is `{request, responses, answer, gate}`: the request body as sent (the key is never in it), every attempt as a
+run line keeps one (the body verbatim, reasoning included), the answer's text, and the gate's refusal of its attack or
+null. `result` is `attack`, `refused` (no attack), `gate` (refused after every retry), `void` (no answer: a timeout,
+a failure on the way, a 429 or a 5xx) or `unpinned` (an answer another provider served, or one a safeguard result came
+with).
+`flag` is the `reason` the body's `flag_injection` gave, or null.
+
+Rounds 1 and 2 were run by hand before the job existed, and are kept in the same form, written from their saved
+exchanges and the record: round 1 asked three of the ward's models and released one attack in hour 66; round 2 asked
+eleven AIs outside the ward, all at once and with no provider pinned, and released the first six attacks to pass the
+gate in hour 84, one burn each. Its `column`s are `a1` to `a11`, the six released first, and none is a ward column. A
+payload released by hand may leave out commentary a model added after its attack, and the eleventh AI's corrected
+attack passed the gate when the hour's places were taken: its turn ends in `attack` with no release. The job's own
+rounds count on from 3, and each is told every earlier attack, the six of round 2 included.
+
+`attacks/index.json` is an array of `{round, day, column, label, route, tx, n, status, fooled, flagged, of}` in round
+order; `column`, `label`, `route`, `tx`, `n` and `status` are those of the round's first attack, and `fooled`,
+`flagged` and `of` count the Venin bodies' runs of every attack of the round that were not void.
+
 ## Publishing
 
 `venin upload` copies the data dir byte for byte to the record's bucket (Cloudflare R2, signed with AWS Signature
@@ -650,12 +701,15 @@ against the file it came from.
 - `anchors.json`, `status.json` and `head.json` are read before the folder is listed and sent last, in that order.
   The runner writes an hour before the head that names it, so the bucket never holds a head before its hour, and a
   failed file ends the pass before the head moves.
-- Every other file (the manifest, the exam list, hours, runs, draws and the library) is written once, with
-  `If-None-Match: *`. When the bucket already holds the path, its recorded SHA-256 must match, or the upload stops
-  with an error; the bucket's copy is never replaced.
-- `head.json`, `status.json`, `anchors.json` and `takedowns.json` are replaced as they change and served with a
-  60-second cache; card files are replaced when a caption changes and served with a 5-minute cache; every other file
-  is served as immutable for a year.
+- `attacks/index.json` is read before the folder is listed too and sent last of all, after the head and the
+  takedowns. `venin attack` writes a round before the index that lists it, so the bucket never holds an index naming
+  a round it lacks; an index that does not go up is alerted and tried again on the next pass, and holds nothing back.
+- Every other file (the manifest, the exam list, hours, runs, draws, attack rounds and the library) is written once,
+  with `If-None-Match: *`. When the bucket already holds the path, its recorded SHA-256 must match, or the upload
+  stops with an error; the bucket's copy is never replaced.
+- `head.json`, `status.json`, `anchors.json`, `takedowns.json` and `attacks/index.json` are replaced as they change
+  and served with a 60-second cache; card files are replaced when a caption changes and served with a 5-minute cache;
+  every other file is served as immutable for a year.
 - Runs are served as the gzip bytes they were hashed as (`application/gzip`, no content encoding); a reader gunzips
   them itself.
 - A path `takedowns.json` lists that is gone from the data dir is deleted from the bucket, once. Its copies cached on

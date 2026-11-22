@@ -62,6 +62,25 @@ pub fn status(config: &Config) -> Result<(), String> {
         Err(e) => println!("anchor key: {e}"),
     }
     println!("paused: {}", s.state_exists("paused"));
+    // The attacker wallet to fund, shown the same way, never its key.
+    if let Some(a) = &config.attack {
+        let key = crate::anchor::load_key(&a.key_file).and_then(|k| {
+            crate::anchor::refuse_test_key(&k, a.chain_id, "attacker").map(|()| k.address())
+        });
+        match key {
+            Ok(address) => println!(
+                "attack key: {} on chain {}",
+                address.to_checksum(None),
+                a.chain_id
+            ),
+            Err(e) => println!("attack key: {e}"),
+        }
+        println!(
+            "attack: enabled {}, paused {}",
+            a.enabled,
+            s.state_exists(crate::attack::PAUSE)
+        );
+    }
     println!(
         "anchors: {} sent, {} due, one in flight: {}",
         s.anchors()?.len(),

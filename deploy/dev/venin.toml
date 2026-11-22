@@ -46,6 +46,26 @@ token = "0x8464135c8F25Da09e49BC8782676a84730C318bC"
 amount = "1000000000000000000000"
 rpcs = ["http://127.0.0.1:8546"]
 
+# The attack round (`venin attack`): from time_utc on, at most one round a UTC day. A dev model writes an attack, the
+# attacker key burns the dev token's release amount on the local anvil and releases it through the local Worker, and
+# the result is written to data/attacks/ once its hour has run. The key is the dev lab's own (mode 0600, holding dev
+# tokens), never the anchor key; touch attack-paused in the state dir to stop it. As the dev league takes no holder
+# strains, a round refuses to start with this file: a rehearsal runs a copy with [release] slots = 1 (README).
+[attack]
+enabled = true
+time_utc = "14:17"
+key_file = "~/Documents/venin-dev/attacker.key"
+rpcs = ["http://127.0.0.1:8546"]
+chain_id = 31337
+token = "0x8464135c8F25Da09e49BC8782676a84730C318bC"
+amount = "1000000000000000000000"
+release_api = "http://127.0.0.1:8787"
+max_gate_retries = 2
+post = false
+gas_limit_max = 100000
+max_fee_per_gas_max = "100000000000"
+daily_cap_wei = "100000000000000000"
+
 # Ministral 3 3B, by Mistral.
 [[models]]
 column = "m1"

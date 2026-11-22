@@ -6,7 +6,7 @@
 use crate::config::{Config, ModelConfig};
 use crate::net::Net;
 use crate::priors::Priors;
-use serde_json::json;
+use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 use venin_core::hour::Planned;
 use venin_core::lab::Lab;
@@ -32,11 +32,16 @@ pub fn request_body(session: &Session, model: &ModelConfig, priors: Option<&Prio
     body["top_p"] = (f64::from(s.top_p_milli) / 1000.0).into();
     body["top_k"] = s.top_k.into();
     body["max_tokens"] = s.max_tokens.into();
+    pin(&mut body, model);
+    body.to_string().into_bytes()
+}
+
+/// Pins a request to the model's one OpenRouter provider, fallbacks and Armor off; a self-hosted model needs nothing.
+pub fn pin(body: &mut Value, model: &ModelConfig) {
     if let Some(or) = &model.openrouter {
         body["provider"] = json!({"order": [or.provider], "allow_fallbacks": false});
         body["plugins"] = json!([{"id": "armor", "enabled": false}]);
     }
-    body.to_string().into_bytes()
 }
 
 /// The headers of a model request: the key and the routing metadata switch for OpenRouter, none otherwise.
@@ -70,16 +75,27 @@ pub struct Period<'a> {
     pub deadline: i64,
 }
 
-impl Period<'_> {
-    fn left(&self) -> Option<Duration> {
-        u64::try_from(self.deadline - crate::now())
-            .ok()
-            .filter(|&s| s > 0)
-            .map(Duration::from_secs)
-    }
+/// Seconds left before `deadline`, none once it has passed.
+fn left(deadline: i64) -> Option<Duration> {
+    u64::try_from(deadline - crate::now())
+        .ok()
+        .filter(|&s| s > 0)
+        .map(Duration::from_secs)
+}
 
-    /// One model call: up to two attempts. Returns the 200 body, or the void reason that ends the run.
-    fn call(
+/// Model calls through the configuration's client and key: each attempt waits at most `timeout`, and nothing is
+/// started or waited for after `deadline`.
+pub struct Caller<'a> {
+    pub net: &'a Net,
+    pub config: &'a Config,
+    pub deadline: i64,
+    pub timeout: Duration,
+}
+
+impl Caller<'_> {
+    /// One model call: up to two attempts, every one kept in `responses`. Returns the 200 body, or the void reason
+    /// that ends the run.
+    pub fn call(
         &self,
         model: &ModelConfig,
         step: u32,
@@ -87,9 +103,9 @@ impl Period<'_> {
         responses: &mut Vec<Response>,
     ) -> Result<String, VoidReason> {
         let url = format!("{}/chat/completions", model.endpoint.trim_end_matches('/'));
+        let left = || left(self.deadline);
         for attempt in 1..=2 {
-            let left = self.left().ok_or(VoidReason::Timeout)?;
-            let timeout = left.min(Duration::from_secs(self.config.call_timeout_s.into()));
+            let timeout = left().ok_or(VoidReason::Timeout)?.min(self.timeout);
             let t = Instant::now();
             let sent =
                 self.net
@@ -108,7 +124,7 @@ impl Period<'_> {
             if status == 200 {
                 return Ok(text);
             }
-            if self.left().is_none() {
+            if left().is_none() {
                 return Err(VoidReason::Timeout);
             }
             if attempt == 1 && retryable(status) {
@@ -117,7 +133,7 @@ impl Period<'_> {
                         .unwrap_or(RETRY_WAIT_DEFAULT_S)
                         .min(RETRY_WAIT_MAX_S),
                 );
-                if self.left().is_none_or(|l| l <= wait) {
+                if left().is_none_or(|l| l <= wait) {
                     return Err(VoidReason::Timeout);
                 }
                 std::thread::sleep(wait);
@@ -126,6 +142,29 @@ impl Period<'_> {
             break;
         }
         Err(VoidReason::Transport)
+    }
+}
+
+impl Period<'_> {
+    fn left(&self) -> Option<Duration> {
+        left(self.deadline)
+    }
+
+    /// One model call of a run, each attempt within the configuration's call timeout.
+    fn call(
+        &self,
+        model: &ModelConfig,
+        step: u32,
+        body: &[u8],
+        responses: &mut Vec<Response>,
+    ) -> Result<String, VoidReason> {
+        let caller = Caller {
+            net: self.net,
+            config: self.config,
+            deadline: self.deadline,
+            timeout: Duration::from_secs(self.config.call_timeout_s.into()),
+        };
+        caller.call(model, step, body, responses)
     }
 
     /// Runs one planned run to its line.

@@ -3,8 +3,9 @@
 # (cargo build --release, pnpm install and build in web/, the Playwright headless shell under
 # /var/lib/venin/ms-playwright); /etc/venin/env (mode 0600, root) holding VENIN_OPENROUTER_KEY and, once the release
 # opens, VENIN_QUEUE_TOKEN; /etc/venin/anchor.key (mode 0600, owner venin) once the anchor is approved. Then
-# `systemctl enable --now venin`. `venin pause` and `venin resume` work while it runs. The record's upload and the
-# hourly post run from their own timers: venin-upload.timer and venin-post.timer.
+# `systemctl enable --now venin`. `venin pause` and `venin resume` work while it runs. The record's upload, the
+# hourly post and the attack round run from their own timers: venin-upload.timer, venin-post.timer and
+# venin-attack.timer.
 
 [Unit]
 Description=Venin lab runner

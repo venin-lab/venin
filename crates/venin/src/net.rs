@@ -169,6 +169,18 @@ impl Net {
 
     /// One JSON-RPC call; an error object or a non-200 status is an error.
     pub fn rpc(&self, url: &str, method: &str, params: Value) -> Result<Value, String> {
+        self.rpc_answer(url, method, params)?
+            .map_err(|e| format!("{method}: {e}"))
+    }
+
+    /// One JSON-RPC call with the node's own refusal kept apart: `Ok(Err(error))` when it answered with an error
+    /// object, `Err` when no answer came (the transport, a non-200 status, a body that is not JSON).
+    pub fn rpc_answer(
+        &self,
+        url: &str,
+        method: &str,
+        params: Value,
+    ) -> Result<Result<Value, Value>, String> {
         let body = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
         let reply = self.post(url, body.to_string().into_bytes(), RPC_TIMEOUT)?;
         if reply.status != 200 {
@@ -176,10 +188,13 @@ impl Net {
         }
         let mut v: Value =
             serde_json::from_str(&reply.body).map_err(|e| format!("{method}: {e}"))?;
-        if let Some(e) = v.get("error") {
-            return Err(format!("{method}: {e}"));
+        if let Some(e) = v.get_mut("error") {
+            return Ok(Err(e.take()));
         }
-        Ok(v.get_mut("result").map(Value::take).unwrap_or(Value::Null))
+        Ok(Ok(v
+            .get_mut("result")
+            .map(Value::take)
+            .unwrap_or(Value::Null)))
     }
 }
 

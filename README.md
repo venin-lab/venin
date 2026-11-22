@@ -83,6 +83,14 @@ runs is in [hours/5.json](https://data.venin.io/hours/5.json) and its run log.
 | site (`web/`) | static pages | the ward in 3D, the hour feed, strains, genes, verify and the check-up in the browser (WebAssembly) |
 | Worker (`worker/`) | Cloudflare | takes holder strain releases and queues them for the runner |
 
+The lab attacks its own ward too. `venin attack`, off until switched on, asks the lab's models in turn to write one
+attack: the prompt in [library/attack-prompt.txt](library/attack-prompt.txt), then every earlier round with how each
+Venin agent took it, in the agents' own flag reasons. The core gate checks the answer and its refusal goes back to the
+same model at most twice; a model that writes no attack passes the turn. The first attack that passes is released as
+any holder's is, with a burn from the lab's own attacker wallet, and runs in the next training hour. At most one round
+starts in a UTC day, and a pause file stops it. Each round, every request and response whole, is kept in
+[attacks/](https://data.venin.io/attacks/index.json) once its hour has run ([docs/RECORD.md](docs/RECORD.md)).
+
 ## Run the dev lab
 
 Needs: the Rust toolchain from `rust-toolchain.toml` (through rustup), Node 25 with pnpm 11, Foundry (`anvil`, `cast`,
@@ -104,6 +112,14 @@ The site is at http://localhost:5173.
 Before a genesis the site reads a synthetic record (league "synthetic fixture") from
 `~/Documents/venin-dev/synthetic`, written by `cargo run -p venin-core --example synthetic -- <dir> <periods>`.
 `venin pause` and `venin resume` write the coming hours as void (`paused`) or run them again.
+
+The dev league takes no holder strains, so `venin attack` refuses to start a round with `deploy/dev/venin.toml`. To
+rehearse one end to end, copy that file, set `[release] slots = 1` and an `[attack] time_utc` that has passed today,
+start the runner on the copy instead of `./dev`'s (with `VENIN_QUEUE_TOKEN` from `~/Documents/venin-dev/queue.token`),
+give the attacker key at `~/Documents/venin-dev/attacker.key` (mode 0600, never the anchor key) dev tokens from the
+dev wallet, and run `target/release/venin attack --config <copy>` every few minutes until `attack.json` in the state
+dir says `done`. Releases already waiting in the dev Worker's queue run first, one a period, and exam periods take
+none, so the round's own release may run a few hours after its burn.
 
 ## Verify a record
 
@@ -142,7 +158,8 @@ paths and counts, never values. `/checkup` on the site does the same in the brow
 crates/core/      the lab's rules, pure: strains, genes, worlds, judging, evolution, record, replay, verify, scan
 crates/venin/     the venin binary: runner, genesis, verify, cards, scan, library build, launch commands
 harness/priors/   the sandbox for Priors bodies: the fetched Priors files under Node's permission model
-library/          strains, genes, tasks, rows, names of variants of concern, pinned sources, calibration
+library/          strains, genes, tasks, rows, names of variants of concern, pinned sources, calibration, the
+                  attack round's prompt
 web/              the site (Vite, Preact, Three.js) and the card renderer
 worker/           the release Worker
 deploy/           dev/ (the local league) and prod/ (the production league and its systemd unit)

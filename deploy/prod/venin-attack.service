@@ -1,0 +1,36 @@
+# The lab's own attack round (`venin attack`), started every 10 minutes by venin-attack.timer. Each run takes the round
+# in hand as far as it goes now and stops; a round starts at most once a UTC day, from [attack] time_utc on. It runs as
+# the runner's user, as it reads the record and writes data/attacks/: it signs with /etc/venin/attacker.key (mode 0600,
+# owner venin, a wallet of its own, never the anchor key) and keeps its state beside the runner's in
+# /var/lib/venin/state. The OpenRouter key comes from /etc/venin/env, and the posting account's keys, used when
+# [attack] post is on, from /etc/venin/post.env. Off until [attack] enabled = true and
+# `systemctl enable --now venin-attack.timer`; `touch /var/lib/venin/state/attack-paused` stops it.
+
+[Unit]
+Description=Venin attack round
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=venin
+Group=venin
+WorkingDirectory=/opt/venin
+EnvironmentFile=/etc/venin/env
+EnvironmentFile=-/etc/venin/post.env
+ExecStart=/opt/venin/target/release/venin attack --config deploy/prod/venin.toml
+# Up to four models a round, each asked up to three times, and an answer with reasoning takes minutes.
+TimeoutStartSec=6h
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectProc=invisible
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths=/var/lib/venin
+ReadOnlyPaths=/etc/venin

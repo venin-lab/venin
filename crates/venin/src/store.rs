@@ -125,7 +125,7 @@ impl Store {
     }
 
     /// Every `<n>.json` in the data dir's `dir`, by `n`.
-    fn numbered(&self, dir: &str) -> Result<BTreeMap<u64, Vec<u8>>, String> {
+    pub fn numbered(&self, dir: &str) -> Result<BTreeMap<u64, Vec<u8>>, String> {
         let dir = self.data.join(dir);
         let mut out = BTreeMap::new();
         let Ok(entries) = std::fs::read_dir(&dir) else {

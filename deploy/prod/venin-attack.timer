@@ -1,0 +1,12 @@
+# Runs venin-attack.service every 10 minutes, once [attack] enabled = true: `systemctl enable --now venin-attack.timer`.
+
+[Unit]
+Description=Take the Venin attack round a step on
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=10min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

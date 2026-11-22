@@ -1,7 +1,7 @@
 //! Anchoring: a zero-value transaction from the anchor address to itself whose calldata commits to a file. The key
 //! is read from its 0600 file after start; the chain id, gas limit, fee and the rolling daily spend are checked before
 //! anything is signed. A transaction that stays pending is sent again with the same nonce and calldata and a fee at
-//! least 12.5% higher.
+//! least 12.5% higher. The attack round's burn (`venin attack`) is landed the same way, from its own key and spend log.
 
 use crate::config::{AnchorChain, wei};
 use crate::net::{Net, quantity, quantity_u64};
@@ -56,9 +56,14 @@ pub fn address(signer: &PrivateKeySigner) -> String {
 
 /// Refuses a public test key anywhere but the local test chain.
 pub fn allowed_on(signer: &PrivateKeySigner, chain_id: u64) -> Result<(), String> {
+    refuse_test_key(signer, chain_id, "anchor")
+}
+
+/// `allowed_on` for the key of `role`, which the refusal names.
+pub fn refuse_test_key(signer: &PrivateKeySigner, chain_id: u64, role: &str) -> Result<(), String> {
     if chain_id != TEST_CHAIN && ANVIL_ACCOUNTS.contains(&address(signer).as_str()) {
         return Err(format!(
-            "the anchor key is one of anvil's public test keys; it signs only on chain {TEST_CHAIN}"
+            "the {role} key is one of anvil's public test keys; it signs only on chain {TEST_CHAIN}"
         ));
     }
     Ok(())
@@ -110,23 +115,54 @@ pub struct Anchorer<'a> {
     config: &'a AnchorChain,
     store: &'a Store,
     signer: PrivateKeySigner,
+    /// What the key is for, as its errors name it: `anchor` for the anchor key.
+    role: &'static str,
+    /// The state file that logs this key's sends for its daily cap.
+    spend: &'static str,
     /// How long one send may stay pending before it is sped up.
     pub wait: Duration,
     pub poll: Duration,
+    /// How long a watched flight's nonce must stay taken, with no receipt for any attempt on any RPC, before the
+    /// flight stops.
+    pub taken_after: Duration,
 }
 
 impl<'a> Anchorer<'a> {
     pub fn new(net: &'a Net, config: &'a AnchorChain, store: &'a Store) -> Result<Self, String> {
+        Self::with_spend(net, config, store, "anchor", "spend.json")
+    }
+
+    /// A key that lands other transactions on its chain under the same checks and caps: its errors name `role`, and
+    /// its sends are logged in `spend`.
+    pub fn with_spend(
+        net: &'a Net,
+        config: &'a AnchorChain,
+        store: &'a Store,
+        role: &'static str,
+        spend: &'static str,
+    ) -> Result<Self, String> {
         let signer = load_key(&config.key_file)?;
-        allowed_on(&signer, config.chain_id)?;
+        refuse_test_key(&signer, config.chain_id, role)?;
         Ok(Anchorer {
             net,
             config,
             store,
             signer,
+            role,
+            spend,
             wait: Duration::from_secs(60),
             poll: Duration::from_secs(2),
+            taken_after: Duration::from_secs(300),
         })
+    }
+
+    /// An EIP-191 `personal_sign` signature over `text`, as `0x` and 130 lower-case hex digits.
+    pub fn sign_message(&self, text: &str) -> Result<String, String> {
+        let signature = self
+            .signer
+            .sign_message_sync(text.as_bytes())
+            .map_err(|e| format!("signing: {e}"))?;
+        Ok(format!("0x{}", venin_core::hex(&signature.as_bytes())))
     }
 
     pub fn address(&self) -> String {
@@ -141,15 +177,15 @@ impl<'a> Anchorer<'a> {
                 Err(e) => last = e,
             }
         }
-        Err(format!("anchor chain: {last}"))
+        Err(format!("{} chain: {last}", self.role))
     }
 
     pub fn check_chain(&self) -> Result<(), String> {
         let id = quantity_u64(&self.rpc("eth_chainId", json!([]))?)?;
         if id != self.config.chain_id {
             return Err(format!(
-                "the anchor RPC is chain {id}, the configuration says {}",
-                self.config.chain_id
+                "the {} RPC is chain {id}, the configuration says {}",
+                self.role, self.config.chain_id
             ));
         }
         Ok(())
@@ -157,6 +193,26 @@ impl<'a> Anchorer<'a> {
 
     pub fn nonce(&self, tag: &str) -> Result<u64, String> {
         quantity_u64(&self.rpc("eth_getTransactionCount", json!([self.address(), tag]))?)
+    }
+
+    /// The key's latest and pending nonces when every configured RPC gives the same pair, each pair read from one
+    /// RPC; `None` when one does not answer or they disagree, so nothing is decided on a reading two nodes split.
+    pub fn nonces(&self) -> Option<(u64, u64)> {
+        let mut agreed = None;
+        for url in &self.config.rpcs {
+            let read = |tag: &str| {
+                let n = self
+                    .net
+                    .rpc(url, "eth_getTransactionCount", json!([self.address(), tag]));
+                n.and_then(|v| quantity_u64(&v)).ok()
+            };
+            let pair = (read("latest")?, read("pending")?);
+            if agreed.is_some_and(|a| a != pair) {
+                return None;
+            }
+            agreed = Some(pair);
+        }
+        agreed
     }
 
     /// The timestamp of block `n` of the anchor chain.
@@ -179,25 +235,26 @@ impl<'a> Anchorer<'a> {
         Ok((base * 2 + priority, priority))
     }
 
-    /// Signs and broadcasts one attempt. Caps are checked first; the attempt is written to the in-flight file before
+    /// Signs and broadcasts one attempt. Caps are checked first; `keep` writes the attempts, this one included, before
     /// it leaves.
     fn send(
         &self,
-        inflight: &mut Inflight,
+        flight: &mut Flight,
+        keep: &dyn Fn(&[Sent]) -> Result<(), String>,
         max_fee: u128,
         priority: u128,
         now: i64,
     ) -> Result<(), String> {
-        let input = calldata(inflight.kind, inflight.n, &inflight.sha);
-        let data = venin_core::unhex(&input).ok_or("calldata is not hex")?;
-        let gas = match inflight.sent.last() {
+        let input = format!("0x{}", venin_core::hex(flight.input));
+        let gas = match flight.sent.last() {
             Some(s) => s.gas,
             None => {
                 let estimate = self.rpc(
                     "eth_estimateGas",
-                    json!([{"from": self.address(), "to": self.address(), "value": "0x0", "data": input}]),
+                    json!([{"from": self.address(), "to": format!("{:#x}", flight.to), "value": "0x0", "data": input}]),
                 )?;
-                quantity_u64(&estimate)?
+                let estimate = quantity_u64(&estimate)?;
+                estimate + (estimate * flight.headroom_pct).div_ceil(100)
             }
         };
         if gas > self.config.gas_limit_max {
@@ -213,22 +270,25 @@ impl<'a> Anchorer<'a> {
             ));
         }
         let cost = u128::from(gas) * max_fee;
-        let mut log: Vec<Spend> = self.store.state_json("spend.json")?.unwrap_or_default();
+        let mut log: Vec<Spend> = self.store.state_json(self.spend)?.unwrap_or_default();
         let cap = wei(&self.config.daily_cap_wei)?;
         if spent_today(&log, now) + cost > cap {
-            return Err(format!("the daily anchor cap of {cap} wei would be passed"));
+            return Err(format!(
+                "the daily {} cap of {cap} wei would be passed",
+                self.role
+            ));
         }
         self.check_chain()?;
         let tx = TxEip1559 {
             chain_id: self.config.chain_id,
-            nonce: inflight.nonce,
+            nonce: flight.nonce,
             gas_limit: gas,
             max_fee_per_gas: max_fee,
             max_priority_fee_per_gas: priority,
-            to: TxKind::Call(self.signer.address()),
+            to: TxKind::Call(flight.to),
             value: U256::ZERO,
             access_list: Default::default(),
-            input: Bytes::from(data),
+            input: Bytes::copy_from_slice(flight.input),
         };
         let signature = self
             .signer
@@ -240,35 +300,69 @@ impl<'a> Anchorer<'a> {
             "0x{}",
             venin_core::hex(&TxEnvelope::from(signed).encoded_2718())
         );
-        inflight.sent.push(Sent {
+        flight.sent.push(Sent {
             tx: hash,
             max_fee: max_fee.to_string(),
             priority: priority.to_string(),
             gas,
             ts: now,
         });
-        self.store.write_state_json("inflight.json", inflight)?;
+        keep(&flight.sent)?;
         log.retain(|s| now - s.ts < DAY_S);
         log.push(Spend {
             ts: now,
             wei: cost.to_string(),
         });
-        self.store.write_state_json("spend.json", &log)?;
-        self.rpc("eth_sendRawTransaction", json!([raw]))?;
-        Ok(())
+        self.store.write_state_json(self.spend, &log)?;
+        match self.broadcast(&raw) {
+            Ok(()) => Ok(()),
+            Err(Broadcast::Unheard(e)) => Err(e),
+            Err(Broadcast::Refused(why)) => {
+                // Every RPC refused it, so it never left: it is no attempt to land and no spend against the cap.
+                flight.sent.pop();
+                keep(&flight.sent)?;
+                log.pop();
+                self.store.write_state_json(self.spend, &log)?;
+                Err(format!(
+                    "every {} RPC refused the transaction: {why}",
+                    self.role
+                ))
+            }
+        }
     }
 
-    /// The block of whichever attempt was mined, if any.
-    fn mined(&self, inflight: &Inflight) -> Result<Option<(String, u64)>, String> {
-        for s in &inflight.sent {
+    /// Sends a signed transaction to each RPC in turn until one takes it. `Refused` only when every RPC answered with
+    /// an error of its own, so the transaction never left; `Unheard` when one gave no answer, as it may have.
+    fn broadcast(&self, raw: &str) -> Result<(), Broadcast> {
+        let (mut refused, mut unheard) = (Vec::new(), None);
+        for url in &self.config.rpcs {
+            match self
+                .net
+                .rpc_answer(url, "eth_sendRawTransaction", json!([raw]))
+            {
+                Ok(Ok(_)) => return Ok(()),
+                Ok(Err(e)) => refused.push(format!("{url}: {e}")),
+                Err(e) => unheard = Some(e),
+            }
+        }
+        Err(match unheard {
+            Some(e) => Broadcast::Unheard(format!("{} chain: {e}", self.role)),
+            None => Broadcast::Refused(refused.join("; ")),
+        })
+    }
+
+    /// Whichever attempt was mined, if any, and whether it ran or reverted (an out-of-gas included).
+    fn mined(&self, sent: &[Sent]) -> Result<Option<Landed>, String> {
+        for s in sent {
             let receipt = self.rpc("eth_getTransactionReceipt", json!([s.tx]))?;
             if receipt.is_null() {
                 continue;
             }
             if quantity(&receipt["status"])? != 1 {
-                return Err(format!("anchor {} reverted", s.tx));
+                return Ok(Some(Landed::Reverted(s.tx.clone())));
             }
-            return Ok(Some((s.tx.clone(), quantity_u64(&receipt["blockNumber"])?)));
+            let block = quantity_u64(&receipt["blockNumber"])?;
+            return Ok(Some(Landed::Mined(s.tx.clone(), block)));
         }
         Ok(None)
     }
@@ -282,7 +376,7 @@ impl<'a> Anchorer<'a> {
         sha: &str,
         count: u64,
     ) -> Result<AnchorEntry, String> {
-        let mut inflight = match self.store.state_json::<Inflight>("inflight.json")? {
+        let inflight = match self.store.state_json::<Inflight>("inflight.json")? {
             Some(f) if (f.kind, f.n, f.sha.as_str()) == (kind, n, sha) => f,
             Some(f) => {
                 return Err(format!(
@@ -306,42 +400,156 @@ impl<'a> Anchorer<'a> {
                 }
             }
         };
+        let input = venin_core::unhex(&calldata(kind, n, sha)).ok_or("calldata is not hex")?;
+        let mut flight = Flight {
+            to: self.signer.address(),
+            input: &input,
+            nonce: inflight.nonce,
+            sent: inflight.sent,
+            headroom_pct: 0,
+            watch_nonce: false,
+        };
+        let nonce = flight.nonce;
+        let keep = |sent: &[Sent]| {
+            let inflight = Inflight {
+                kind,
+                n,
+                sha: sha.to_string(),
+                nonce,
+                sent: sent.to_vec(),
+            };
+            self.store.write_state_json("inflight.json", &inflight)
+        };
+        match self.land(&mut flight, &keep)? {
+            Landed::Mined(tx, block) => Ok(AnchorEntry { kind, n, tx, block }),
+            Landed::Reverted(tx) => Err(format!("anchor {tx} reverted")),
+        }
+    }
+
+    /// Lands one transaction from the key's address: `flight.input` sent to `flight.to` with `flight.nonce`, until one
+    /// attempt is mined. `flight.sent` holds the attempts made so far (an earlier run's, when it resumes), and `keep`
+    /// writes them to the state dir before each new one leaves. A pending attempt is sent again after `wait` with the
+    /// same nonce and input and a fee at least 12.5% higher. Returns the attempt mined, ran or reverted.
+    ///
+    /// A watched flight (`watch_nonce`) looks at its nonce before each speed-up. When the nonce has moved on, an
+    /// attempt landed on a node the RPC that answered lags behind, or another transaction took it: no speed-up goes
+    /// out, every RPC is asked for every attempt's receipt, again each `wait`, and only after `taken_after` without one
+    /// does the flight stop, rather than speed up a nonce that is gone into the daily cap. Anchors are not watched.
+    pub fn land(
+        &self,
+        flight: &mut Flight,
+        keep: &dyn Fn(&[Sent]) -> Result<(), String>,
+    ) -> Result<Landed, String> {
+        let mut taken_since: Option<Instant> = None;
         loop {
-            if let Some((tx, block)) = self.mined(&inflight)? {
-                return Ok(AnchorEntry { kind, n, tx, block });
+            if let Some(landed) = self.mined(&flight.sent)? {
+                return Ok(landed);
             }
             let now = crate::now();
-            let (max_fee, priority) = match inflight.sent.last() {
+            let (max_fee, priority) = match flight.sent.last() {
                 None => self.fees()?,
                 Some(s) if now - s.ts < self.wait.as_secs() as i64 => {
-                    self.await_receipt(&inflight, s.ts)?;
+                    self.await_receipt(&flight.sent, s.ts)?;
+                    continue;
+                }
+                Some(_) if flight.watch_nonce && self.nonce("latest")? > flight.nonce => {
+                    if let Some(landed) = self.mined_anywhere(&flight.sent)? {
+                        return Ok(landed);
+                    }
+                    let since = *taken_since.get_or_insert_with(Instant::now);
+                    if since.elapsed() >= self.taken_after {
+                        return Err(format!(
+                            "nonce {} of {} moved on and no RPC has a receipt for any of its attempts ({}) after {} \
+                             s: another transaction took it, and nothing more is sent",
+                            flight.nonce,
+                            self.address(),
+                            flight
+                                .sent
+                                .iter()
+                                .map(|s| s.tx.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", "),
+                            self.taken_after.as_secs()
+                        ));
+                    }
+                    std::thread::sleep(self.wait.min(self.taken_after));
                     continue;
                 }
                 Some(s) => {
+                    taken_since = None;
                     let (fresh_fee, fresh_priority) = self.fees()?;
                     let max_fee = bump(wei(&s.max_fee)?).max(fresh_fee);
                     let priority = bump(wei(&s.priority)?).max(fresh_priority);
                     (max_fee, priority.min(max_fee))
                 }
             };
-            self.send(&mut inflight, max_fee, priority, now)?;
-            self.await_receipt(&inflight, now)?;
+            self.send(flight, keep, max_fee, priority, now)?;
+            self.await_receipt(&flight.sent, now)?;
         }
     }
 
-    fn await_receipt(&self, inflight: &Inflight, since: i64) -> Result<(), String> {
+    /// Whichever attempt any configured RPC has a receipt for; `None` only when every RPC answered for every attempt
+    /// without one.
+    fn mined_anywhere(&self, sent: &[Sent]) -> Result<Option<Landed>, String> {
+        for url in &self.config.rpcs {
+            for s in sent {
+                let receipt = self
+                    .net
+                    .rpc(url, "eth_getTransactionReceipt", json!([s.tx]))?;
+                if receipt.is_null() {
+                    continue;
+                }
+                if quantity(&receipt["status"])? != 1 {
+                    return Ok(Some(Landed::Reverted(s.tx.clone())));
+                }
+                let block = quantity_u64(&receipt["blockNumber"])?;
+                return Ok(Some(Landed::Mined(s.tx.clone(), block)));
+            }
+        }
+        Ok(None)
+    }
+
+    fn await_receipt(&self, sent: &[Sent], since: i64) -> Result<(), String> {
         let t = Instant::now();
         let left = self.wait.saturating_sub(Duration::from_secs(
             u64::try_from(crate::now() - since).unwrap_or(0),
         ));
         while t.elapsed() < left {
-            if self.mined(inflight)?.is_some() {
+            if self.mined(sent)?.is_some() {
                 return Ok(());
             }
             std::thread::sleep(self.poll);
         }
         Ok(())
     }
+}
+
+/// A transaction being landed: what it sends, the nonce it takes and every attempt so far.
+pub struct Flight<'i> {
+    pub to: Address,
+    pub input: &'i [u8],
+    pub nonce: u64,
+    pub sent: Vec<Sent>,
+    /// Gas above the estimate the first attempt asks for, in percent: a call whose cost moves between the estimate
+    /// and the block (a token transfer, a chain that prices its data) needs room an anchor does not.
+    pub headroom_pct: u64,
+    /// Looks at the nonce before each speed-up and stops when another transaction took it (see `land`).
+    pub watch_nonce: bool,
+}
+
+/// Why a broadcast did not go out.
+enum Broadcast {
+    /// Every RPC answered with an error of its own: the transaction never left.
+    Refused(String),
+    /// Some RPC gave no answer: the transaction may have left.
+    Unheard(String),
+}
+
+/// How a transaction landed: mined and run (its hash and block), or mined and reverted (its hash).
+#[derive(Debug, PartialEq, Eq)]
+pub enum Landed {
+    Mined(String, u64),
+    Reverted(String),
 }
 
 /// The address a key file signs for, after the same checks the runner makes.
@@ -490,6 +698,142 @@ pub mod tests {
             (200, Vec::new(), reply.to_string())
         });
         (url, raws)
+    }
+
+    /// How `wallet_chain` takes what it is sent.
+    #[derive(Clone, Copy, Default)]
+    pub struct Script {
+        /// The first raw transactions taken are never mined.
+        pub stuck: usize,
+        /// Of those mined, the first revert.
+        pub reverted: usize,
+        /// None is mined, but the nonce moves on as if another transaction had taken it.
+        pub taken: bool,
+        /// Transactions in the mempool beyond those mined.
+        pub pending: u64,
+        /// The first broadcasts are refused with the node's own error, and never taken.
+        pub refused: usize,
+    }
+
+    pub fn hash_of(raw: &str) -> String {
+        let bytes = venin_core::unhex(raw).expect("hex");
+        let tx = TxEnvelope::decode_2718(&mut bytes.as_slice()).expect("decodes");
+        format!("{:#x}", tx.tx_hash())
+    }
+
+    /// A chain of id 31337 for one sending key, estimating 34,000 gas: each raw transaction taken is mined at once as
+    /// `script` says, and each one mined moves the nonce on. An RPC's path changes what it sees: `/lag` has no
+    /// receipts, `/split` reports nonces one higher and `/fail` answers no nonce read. Returns its URL and the raw
+    /// transactions taken.
+    pub fn wallet_chain(script: Script) -> (String, Arc<Mutex<Vec<String>>>) {
+        let raws: Arc<Mutex<Vec<String>>> = Arc::default();
+        let log = raws.clone();
+        let refusals = Arc::new(Mutex::new(script.refused));
+        let (url, _) = serve(move |_, path, body| {
+            let v: Value = serde_json::from_str(body).expect("json");
+            let hashes: Vec<String> = log
+                .lock()
+                .expect("lock")
+                .iter()
+                .map(|r| hash_of(r))
+                .collect();
+            let param = &v["params"];
+            let mined = if script.taken {
+                hashes.len()
+            } else {
+                hashes.len().saturating_sub(script.stuck)
+            };
+            let method = v["method"].as_str().unwrap_or_default();
+            if path == "/fail" && method == "eth_getTransactionCount" {
+                return (500, Vec::new(), String::new());
+            }
+            let result = match method {
+                "eth_chainId" => json!("0x7a69"),
+                "eth_getTransactionCount" => {
+                    let more = if param[1] == "pending" {
+                        script.pending
+                    } else {
+                        0
+                    };
+                    let split = u64::from(path == "/split");
+                    json!(hex_quantity(u128::from(mined as u64 + more + split)))
+                }
+                "eth_getBlockByNumber" => {
+                    json!({"number": "0x64", "timestamp": "0x1", "baseFeePerGas": "0x3b9aca00"})
+                }
+                "eth_maxPriorityFeePerGas" => json!("0x1"),
+                "eth_estimateGas" => json!("0x84d0"),
+                "eth_sendRawTransaction" => {
+                    let mut left = refusals.lock().expect("lock");
+                    if *left > 0 {
+                        *left -= 1;
+                        let no = json!({"jsonrpc": "2.0", "id": 1,
+                            "error": {"code": -32000, "message": "insufficient funds for gas * price + value"}});
+                        return (200, Vec::new(), no.to_string());
+                    }
+                    let raw = param[0].as_str().unwrap_or_default().to_string();
+                    let hash = hash_of(&raw);
+                    log.lock().expect("lock").push(raw);
+                    json!(hash)
+                }
+                "eth_getTransactionReceipt" => match hashes.iter().position(|h| param[0] == *h) {
+                    Some(i) if path != "/lag" && !script.taken && i >= script.stuck => json!({
+                        "status": if i - script.stuck < script.reverted { "0x0" } else { "0x1" },
+                        "blockNumber": hex_quantity(100 + i as u128),
+                    }),
+                    _ => Value::Null,
+                },
+                _ => Value::Null,
+            };
+            let reply = json!({"jsonrpc": "2.0", "id": 1, "result": result});
+            (200, Vec::new(), reply.to_string())
+        });
+        (url, raws)
+    }
+
+    /// A broadcast every RPC refuses never left: it is dropped from the anchor in flight and from the spend log, the
+    /// node's own error is what the anchor fails with, and the next try sends the same nonce afresh. Anchors that did
+    /// go out resume as before.
+    #[test]
+    fn a_refused_broadcast_leaves_no_attempt_and_no_spend() {
+        let dir = temp("refused");
+        let key = key_file(&dir, 0o600);
+        let (url, raws) = wallet_chain(Script {
+            refused: 2,
+            ..Script::default()
+        });
+        let net = Net::new(std::slice::from_ref(&url)).expect("client");
+        let config = chain_config(&url, &key, TEST_CHAIN);
+        let store = Store::new(dir.join("data"), dir.join("state"));
+        let mut a = Anchorer::new(&net, &config, &store).expect("anchorer");
+        a.wait = Duration::from_secs(1);
+        a.poll = Duration::from_millis(100);
+        let sha = "ab".repeat(32);
+        for _ in 0..2 {
+            let e = a.anchor(AnchorKind::Hour, 7, &sha, 0).expect_err("refused");
+            assert!(e.contains("insufficient funds"), "{e}");
+            let inflight: Inflight = store
+                .state_json("inflight.json")
+                .expect("reads")
+                .expect("kept");
+            assert_eq!((inflight.nonce, inflight.sent.len()), (0, 0));
+            let log: Vec<Spend> = store
+                .state_json("spend.json")
+                .expect("reads")
+                .expect("kept");
+            assert!(
+                log.is_empty(),
+                "nothing that never left counts against the cap"
+            );
+        }
+        let entry = a.anchor(AnchorKind::Hour, 7, &sha, 0).expect("anchors");
+        assert_eq!(entry.tx, hash_of(&raws.lock().expect("lock")[0]));
+        assert_eq!(raws.lock().expect("lock").len(), 1);
+        let log: Vec<Spend> = store
+            .state_json("spend.json")
+            .expect("reads")
+            .expect("kept");
+        assert_eq!(log.len(), 1);
     }
 
     pub fn chain_config(rpc: &str, key: &Path, chain_id: u64) -> AnchorChain {

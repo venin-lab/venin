@@ -104,6 +104,12 @@ Venomous animals, one per line, in the order variants of concern receive them. P
 
 One table per source: `id`, `name`, `url`, `commit`, `files` (path and SHA-256 per file), `license`, `use`.
 
+## attack-prompt.txt
+
+The prompt `venin attack` sends each model at the start of a round, word for word, before the rounds so far (see
+`attacks/<round>.json` in RECORD.md). It names the placeholders a holder payload uses and the form of the answer:
+a `PLACE:` line with the route, then `ATTACK:` and the text.
+
 ## calibration.json
 
 Written by `venin library calibrate --apply` before genesis: the league and models the strains ran on, the number of

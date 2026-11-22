@@ -3,7 +3,9 @@
 //! when the bucket already holds it, its recorded SHA-256 must match. The files that change every hour (the anchors,
 //! the status, the head, the takedowns and the cards) are replaced, and a file takedowns.json lists that is gone from
 //! the folder is deleted. The pointers (anchors, status, head) are read before the folder is listed and sent last, so
-//! the bucket never holds a head before the hour it names, and a failure ends the pass before the head moves.
+//! the bucket never holds a head before the hour it names, and a failure ends the pass before the head moves. The
+//! attack rounds' index is read before the listing too and sent last of all: it never names a round the bucket lacks,
+//! and a failure to send it never holds the record back.
 
 use crate::config::Config;
 use crate::net::{Net, Reply, pct};
@@ -26,6 +28,8 @@ pub const SECRET_ENV: &str = "VENIN_R2_SECRET";
 
 /// The files a pass sends last, in this order.
 const POINTERS: [&str; 3] = ["anchors.json", "status.json", "head.json"];
+/// The attack rounds' index, sent after everything else: `venin attack` writes a round before the index that lists it.
+const INDEX: &str = "attacks/index.json";
 /// What the bucket already holds, by path, kept in the runner's state folder.
 const STATE: &str = "upload.json";
 /// How a deleted file is remembered in the state.
@@ -129,8 +133,15 @@ fn send_all(
             pointers.push((path, file));
         }
     }
+    // Read before the listing as well, so it names only rounds the listing holds; one that cannot be read waits.
+    let index = read(&data.join(INDEX)).unwrap_or_else(|e| {
+        log(&format!(
+            "upload: {e}; the attack index waits for the next pass"
+        ));
+        None
+    });
     let mut rest = files(data)?;
-    rest.retain(|p| !POINTERS.contains(&p.as_str()));
+    rest.retain(|p| !POINTERS.contains(&p.as_str()) && p != INDEX);
     rest.sort();
     let mut sent = 0;
     for (i, path) in rest.iter().enumerate() {
@@ -160,6 +171,13 @@ fn send_all(
     }
     // After the head, so a takedown list that cannot be read never holds the record back.
     takedowns(net, bucket, state, data)?;
+    // Last of all: an index that does not go up holds back nothing, and is tried again on the next pass.
+    if let Some(file) = index {
+        sent += usize::from(
+            commit(net, bucket, state, INDEX, file)
+                .map_err(|e| format!("the attack index waits for the next pass: {e}"))?,
+        );
+    }
     Ok(sent)
 }
 
@@ -299,10 +317,13 @@ fn takedowns(net: &Net, bucket: &Bucket, state: &mut State, data: &Path) -> Resu
     Ok(())
 }
 
-/// The files written again after their first version: the pointers, the takedown list and the cards (rewritten when a
-/// caption changes). Every other file is part of the record and written once.
+/// The files written again after their first version: the pointers, the takedown list, the attack rounds' index (a
+/// line more each round) and the cards (rewritten when a caption changes). Every other file is written once.
 fn replaced(path: &str) -> bool {
-    POINTERS.contains(&path) || path == "takedowns.json" || path.starts_with("cards/")
+    POINTERS.contains(&path)
+        || path == "takedowns.json"
+        || path == INDEX
+        || path.starts_with("cards/")
 }
 
 fn cache_control(path: &str) -> &'static str {
@@ -667,6 +688,98 @@ mod tests {
         );
     }
 
+    /// The attack rounds' index goes up after every round file it lists, as the head after its hour; a round file is
+    /// written once, the index replaced.
+    #[test]
+    fn the_attack_index_goes_up_after_the_rounds_it_lists() {
+        let (data, store) = folder(
+            "upload-attacks",
+            &[
+                ("head.json", r#"{"n":0}"#),
+                ("hours/0.json", "{}"),
+                ("attacks/index.json", "[1]"),
+                ("attacks/1.json", "{}"),
+            ],
+        );
+        let (bucket, net, seen, _) = in_memory("venin-record");
+        assert_eq!(pass(&net, &bucket, &store, &data).expect("pass"), 4);
+        assert_eq!(
+            requests(&seen),
+            [
+                "attacks/1.json",
+                "hours/0.json",
+                "head.json",
+                "attacks/index.json"
+            ]
+            .map(put)
+        );
+        std::fs::write(data.join("attacks/2.json"), "{}").expect("write");
+        std::fs::write(data.join("attacks/index.json"), "[1,2]").expect("write");
+        assert_eq!(pass(&net, &bucket, &store, &data).expect("pass"), 2);
+        assert_eq!(
+            requests(&seen)[4..],
+            [put("attacks/2.json"), put("attacks/index.json")]
+        );
+        for (_, path, _, head) in seen.lock().expect("lock").iter() {
+            let once =
+                path.ends_with("/1.json") || path.ends_with("/2.json") || path.contains("/hours/");
+            assert_eq!(head.contains("if-none-match: *"), once, "{path}");
+        }
+    }
+
+    /// An index the bucket refuses holds back neither the pointers of its pass nor those of the next; it alerts and goes
+    /// up on a later pass.
+    #[test]
+    fn an_index_that_does_not_go_up_holds_back_nothing() {
+        let (data, store) = folder(
+            "upload-index-fails",
+            &[
+                ("head.json", r#"{"n":0}"#),
+                ("anchors.json", "[]"),
+                ("attacks/1.json", "{}"),
+                ("attacks/index.json", "[1]"),
+            ],
+        );
+        let refuse = Arc::new(Mutex::new(true));
+        let toggle = refuse.clone();
+        let (url, seen) = serve_head(move |_, path, _, _| {
+            let no = *toggle.lock().expect("lock") && path.ends_with("/attacks/index.json");
+            (if no { 500 } else { 200 }, Vec::new(), String::new())
+        });
+        let net = Net::new(std::slice::from_ref(&url)).expect("client");
+        let bucket = Bucket {
+            endpoint: url,
+            name: "venin-record".into(),
+            region: "auto".into(),
+            key_id: "KEYID".into(),
+            secret: "secret".into(),
+        };
+        let e = pass(&net, &bucket, &store, &data).expect_err("the index is refused");
+        assert!(e.contains("the attack index waits"), "{e}");
+        assert_eq!(
+            requests(&seen),
+            [
+                "attacks/1.json",
+                "anchors.json",
+                "head.json",
+                "attacks/index.json"
+            ]
+            .map(put),
+            "the record went up first"
+        );
+        std::fs::write(data.join("head.json"), r#"{"n":1}"#).expect("write");
+        let e = pass(&net, &bucket, &store, &data).expect_err("still refused");
+        assert!(e.contains("the attack index waits"), "{e}");
+        assert_eq!(
+            requests(&seen)[4..],
+            [put("head.json"), put("attacks/index.json")],
+            "the next head is not held back"
+        );
+        *refuse.lock().expect("lock") = false;
+        assert_eq!(pass(&net, &bucket, &store, &data).expect("pass"), 1);
+        assert_eq!(requests(&seen)[6..], [put("attacks/index.json")]);
+    }
+
     #[test]
     fn a_recorded_file_is_never_replaced_and_a_refusal_holds_the_head_back() {
         let (data, store) = folder(
@@ -789,6 +902,8 @@ mod tests {
         assert!(
             replaced("cards/3.png") && !replaced("draws/3.json") && !replaced("library/genes.json")
         );
+        assert!(replaced("attacks/index.json") && !replaced("attacks/1.json"));
+        assert_eq!(cache_control("attacks/index.json"), "public, max-age=60");
         assert_eq!(
             host("https://a.r2.cloudflarestorage.com/b/k").expect("host"),
             "a.r2.cloudflarestorage.com"

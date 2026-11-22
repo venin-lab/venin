@@ -53,6 +53,80 @@ pub struct Config {
     /// The hourly post, for `venin post`.
     #[serde(default)]
     pub post: Option<Post>,
+    /// The lab's own attack round, for `venin attack`.
+    #[serde(default)]
+    pub attack: Option<Attack>,
+}
+
+/// The lab's own attack round: a lab model writes one attack, the attacker wallet burns `amount` and releases it as a
+/// holder would, and the result is recorded and posted once its hour has run. At most one round a UTC day.
+///
+/// Known limit: the wallet's six fields repeat `AnchorChain`'s, because `deny_unknown_fields` rules out
+/// `serde(flatten)`; an `[attack.wallet]` table of that type would drop the copy, at the price of a config change.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Attack {
+    /// Off, no round starts, no model is asked and no burn is sent. A burn already sent is landed and its round
+    /// finishes (release, hour, record, post) whatever this says; only the pause file stops that.
+    #[serde(default)]
+    pub enabled: bool,
+    /// The earliest time of a UTC day a round starts, as `HH:MM`.
+    pub time_utc: String,
+    /// The attacker wallet's key, under the anchor key's checks; never the anchor key.
+    pub key_file: PathBuf,
+    pub rpcs: Vec<String>,
+    /// The token's chain, as `[release]` names it.
+    pub chain_id: u64,
+    /// The token contract, as `[release]` names it.
+    pub token: String,
+    /// The burn in the token's smallest unit, as a decimal string; at least `[release] amount`.
+    pub amount: String,
+    /// The release Worker's base URL; the release is sent to `<release_api>/api/release`.
+    pub release_api: String,
+    /// How many times a model is sent the gate's refusal of its attack.
+    #[serde(default = "two")]
+    pub max_gate_retries: u32,
+    /// Posts each round's result from the hourly post's account, when that posting is on.
+    #[serde(default)]
+    pub post: bool,
+    pub gas_limit_max: u64,
+    /// Wei, as a decimal string.
+    pub max_fee_per_gas_max: String,
+    /// Wei per rolling 24 hours, as a decimal string.
+    pub daily_cap_wei: String,
+}
+
+impl Attack {
+    /// Seconds after midnight UTC of `time_utc`.
+    pub fn start_s(&self) -> Result<i64, String> {
+        let bad = || format!("attack: time_utc {:?} is not HH:MM", self.time_utc);
+        let (h, m) = self.time_utc.split_once(':').ok_or_else(bad)?;
+        let digits = |s: &str| s.len() == 2 && s.bytes().all(|b| b.is_ascii_digit());
+        let (h, m): (i64, i64) = match (digits(h), digits(m)) {
+            (true, true) => (h.parse().map_err(|_| bad())?, m.parse().map_err(|_| bad())?),
+            _ => return Err(bad()),
+        };
+        if h > 23 || m > 59 {
+            return Err(bad());
+        }
+        Ok(h * 3600 + m * 60)
+    }
+
+    /// The attacker wallet as the anchor's sender takes a chain: its RPCs, key and caps.
+    pub fn wallet(&self) -> AnchorChain {
+        AnchorChain {
+            chain_id: self.chain_id,
+            rpcs: self.rpcs.clone(),
+            key_file: self.key_file.clone(),
+            gas_limit_max: self.gas_limit_max,
+            max_fee_per_gas_max: self.max_fee_per_gas_max.clone(),
+            daily_cap_wei: self.daily_cap_wei.clone(),
+        }
+    }
+}
+
+fn two() -> u32 {
+    2
 }
 
 /// The record's public bucket. Its endpoint and keys come from the environment (`upload::ENDPOINT_ENV` and the
@@ -237,6 +311,9 @@ impl Config {
         ] {
             *p = expand(p);
         }
+        if let Some(a) = &mut c.attack {
+            a.key_file = expand(&a.key_file);
+        }
         let optional = c.models.iter_mut().map(|m| &mut m.gguf);
         for p in optional
             .chain([&mut c.llama_server, &mut c.host_check.reader_file])
@@ -339,6 +416,39 @@ impl Config {
         if let Some(post) = &self.post {
             crate::net::origin(&post.api)?;
         }
+        if let Some(a) = &self.attack {
+            self.check_attack(a)?;
+        }
+        Ok(())
+    }
+
+    /// An attack round burns for a release the runner takes: the token, chain and at least the amount of `[release]`.
+    fn check_attack(&self, a: &Attack) -> Result<(), String> {
+        a.start_s()?;
+        let r = self
+            .release
+            .as_ref()
+            .ok_or("attack: needs the [release] section its burns are taken by")?;
+        if a.chain_id != r.chain_id || !a.token.eq_ignore_ascii_case(&r.token) {
+            return Err("attack: chain_id and token must be those of [release]".into());
+        }
+        a.token
+            .parse::<alloy::primitives::Address>()
+            .map_err(|e| format!("attack: token {}: {e}", a.token))?;
+        if wei(&a.amount)? < wei(&r.amount)? {
+            return Err("attack: amount must be at least [release] amount".into());
+        }
+        if a.rpcs.is_empty() {
+            return Err("attack: rpcs needs at least one RPC".into());
+        }
+        if a.key_file == self.anchor.key_file {
+            return Err("attack: key_file must not be the anchor key".into());
+        }
+        wei(&a.max_fee_per_gas_max)?;
+        wei(&a.daily_cap_wei)?;
+        for url in a.rpcs.iter().chain([&a.release_api]) {
+            crate::net::origin(url)?;
+        }
         Ok(())
     }
 
@@ -419,6 +529,16 @@ pub mod tests {
         assert!(c.urls().contains(&release.queue_url));
         let reader = c.host_check.reader_file.as_ref().expect("a reader file");
         assert!(reader.is_absolute() && c.host_check.reader.is_none());
+        let attack = c.attack.as_ref().expect("an attack round");
+        assert!(attack.enabled && !attack.post && attack.key_file.is_absolute());
+        assert_eq!(
+            (attack.chain_id, attack.amount.as_str(), attack.start_s()),
+            (31337, release.amount.as_str(), Ok(14 * 3600 + 17 * 60))
+        );
+        assert!(
+            !c.urls().contains(&attack.release_api),
+            "the runner never reaches the Worker's release endpoint"
+        );
     }
 
     #[test]
@@ -454,6 +574,21 @@ pub mod tests {
                     .ends_with(&m.openrouter.as_ref().expect("pinned").provider)
         }));
         assert!(c.urls().iter().all(|u| u.starts_with("https://")));
+        let attack = c.attack.as_ref().expect("the attack round's section");
+        assert!(
+            !attack.enabled && !attack.post,
+            "off until the owner approves"
+        );
+        assert_eq!(attack.key_file, Path::new("/etc/venin/attacker.key"));
+        assert_eq!(
+            (
+                attack.chain_id,
+                attack.token.as_str(),
+                attack.amount.as_str()
+            ),
+            (4663, release.token.as_str(), release.amount.as_str())
+        );
+        assert_eq!(attack.release_api, "https://venin.io");
         assert_eq!(
             crate::genesis::model_pins(&c).expect("pins"),
             ("openrouter".to_string(), vec![String::new(); 4])
@@ -512,6 +647,67 @@ pub mod tests {
             ),
         ] {
             assert!(Config::parse(&good.replacen(from, to, 1)).is_err(), "{to}");
+        }
+    }
+
+    #[test]
+    fn an_attack_round_burns_only_for_a_release_the_runner_takes() {
+        let release = "[release]\nqueue_url = \"http://127.0.0.1:3/api/queue\"\nslots = 6\nchain_id = 31337\n\
+                       token = \"0x5fbdb2315678afecb367f032d93f642f64180aa3\"\namount = \"1000\"\n\
+                       rpcs = [\"http://127.0.0.1:1\"]\n";
+        let attack = "[attack]\nenabled = true\ntime_utc = \"14:17\"\nkey_file = \"~/attacker.key\"\n\
+                      rpcs = [\"http://127.0.0.1:1\"]\nchain_id = 31337\n\
+                      token = \"0x5FbDB2315678afecb367f032d93F642f64180aa3\"\namount = \"1000\"\n\
+                      release_api = \"http://127.0.0.1:3\"\ngas_limit_max = 100000\n\
+                      max_fee_per_gas_max = \"100000000000\"\ndaily_cap_wei = \"1000000000000000000\"\n";
+        let base = text(
+            Path::new("/tmp/x"),
+            "http://127.0.0.1:1",
+            "http://127.0.0.1:2/v1",
+        );
+        let good = format!("{base}{release}{attack}");
+        let c = Config::parse(&good).expect("parses");
+        let a = c.attack.as_ref().expect("attack");
+        assert_eq!((a.max_gate_retries, a.post), (2, false), "the defaults");
+        assert!(a.key_file.is_absolute(), "~ is expanded");
+        assert_eq!(a.wallet().rpcs, a.rpcs);
+        assert!(
+            Config::parse(&format!("{base}{attack}")).is_err(),
+            "no [release]"
+        );
+        for (from, to) in [
+            ("time_utc = \"14:17\"", "time_utc = \"24:00\""),
+            ("time_utc = \"14:17\"", "time_utc = \"2:17\""),
+            (
+                "chain_id = 31337\ntoken = \"0x5F",
+                "chain_id = 1\ntoken = \"0x5F",
+            ),
+            ("token = \"0x5FbDB", "token = \"0x6FbDB"),
+            (
+                "amount = \"1000\"\nrelease_api",
+                "amount = \"999\"\nrelease_api",
+            ),
+            (
+                "key_file = \"~/attacker.key\"",
+                "key_file = \"/tmp/x/anchor.key\"",
+            ),
+            (
+                "rpcs = [\"http://127.0.0.1:1\"]\nchain_id = 31337\ntoken = \"0x5F",
+                "rpcs = []\nchain_id = 31337\ntoken = \"0x5F",
+            ),
+            ("release_api = \"http://", "release_api = \"ftp://"),
+            (
+                "daily_cap_wei = \"1000000000000000000\"\n",
+                "daily_cap_wei = \"1e18\"\n",
+            ),
+            (
+                "gas_limit_max = 100000\n",
+                "gas_limit_max = 100000\nextra = 1\n",
+            ),
+        ] {
+            let bad = good.replacen(from, to, 1);
+            assert_ne!(bad, good, "{from}");
+            assert!(Config::parse(&bad).is_err(), "{to}");
         }
     }
 

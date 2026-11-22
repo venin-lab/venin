@@ -1,4 +1,5 @@
 mod anchor;
+mod attack;
 mod budget;
 mod cards;
 mod config;
@@ -97,6 +98,10 @@ enum Command {
     Upload(JobArgs),
     /// Post the latest hour's caption and card on X once, when posting is on; off, show what it would post.
     Post(JobArgs),
+    /// Take the lab's own attack round a step on: a lab model writes an attack, the attacker wallet burns and releases
+    /// it, and its result is recorded and posted once its hour has run; at most one round a UTC day. A timer runs it,
+    /// always on the configuration's state_dir.
+    Attack(JobArgs),
 }
 
 /// A timer job beside the runner: its configuration, and the folder it keeps its own state in.
@@ -116,7 +121,10 @@ impl JobArgs {
         name: &str,
         job: fn(&config::Config, &store::Store) -> Result<(), String>,
     ) -> Result<(), String> {
-        let config = config::Config::load(&self.config.config)?;
+        let mut config = config::Config::load(&self.config.config)?;
+        config.openrouter_key = std::env::var(config::OPENROUTER_KEY_ENV)
+            .ok()
+            .filter(|k| !k.is_empty());
         let state = self.state_dir.unwrap_or_else(|| config.state_dir.clone());
         let store = store::Store::new(config.data_dir.clone(), state);
         job(&config, &store)
@@ -251,6 +259,12 @@ fn run(command: Command) -> Result<(), String> {
         }
         Command::Upload(job) => job.run("upload", upload::run),
         Command::Post(job) => job.run("post", post::run),
+        Command::Attack(job) if job.state_dir.is_some() => Err(
+            "venin attack keeps its round in the configuration's state_dir only: a second state dir could start a \
+             second round the same day, so --state-dir is refused"
+                .into(),
+        ),
+        Command::Attack(job) => job.run("attack", attack::run),
     }
 }
 
@@ -294,6 +308,7 @@ mod tests {
             &["venin", "resume"],
             &["venin", "priors", "restore", "--reason", "fixed"],
             &["venin", "launch", "set-ca", "0x00"],
+            &["venin", "attack", "--config", "x.toml"],
         ] {
             assert!(Cli::try_parse_from(args).is_ok(), "{args:?}");
         }
@@ -302,6 +317,10 @@ mod tests {
         assert!(Cli::try_parse_from(["venin", "cards"]).is_err());
         assert!(Cli::try_parse_from(["venin", "scan"]).is_err());
         assert!(Cli::try_parse_from(["venin", "priors", "restore"]).is_err());
+        let other =
+            Cli::try_parse_from(["venin", "attack", "--state-dir", "/tmp/s"]).expect("parses");
+        let e = run(other.command).expect_err("one state dir");
+        assert!(e.contains("--state-dir is refused"), "{e}");
     }
 
     #[test]
