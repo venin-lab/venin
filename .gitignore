@@ -10,3 +10,6 @@ dist/
 .DS_Store
 /deploy/dev/token/out/
 /deploy/dev/token/cache/
+/npm/LICENSE
+/npm/venin_core*
+/npm/*.tgz
