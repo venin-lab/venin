@@ -1,4 +1,4 @@
-# venin
+# @veninlab/venin
 
 The check-up behind [venin.io/checkup](https://venin.io/checkup), as WebAssembly for Node. It reads an AI agent's
 files (skills, memory notes, rules, MCP and editor settings) and reports orders planted in them, text hidden from the
@@ -6,13 +6,13 @@ reader, tools that act with no one asking, and permissions that are too wide. It
 what it is given.
 
 ```sh
-npm install venin
+npm install @veninlab/venin
 ```
 
 ## Use
 
 ```js
-import { scan } from "venin";
+import { scan } from "@veninlab/venin";
 
 const files = [
   {

@@ -1,5 +1,5 @@
 {
-  "name": "venin",
+  "name": "@veninlab/venin",
   "version": "0.1.0",
   "description": "The Venin check-up as WebAssembly: finds orders planted in an AI agent's skills, memory notes and settings.",
   "license": "MIT",
@@ -21,5 +21,15 @@
     "url": "git+https://github.com/venin-lab/venin.git",
     "directory": "npm"
   },
-  "keywords": ["ai-agent", "agent-security", "prompt-injection", "mcp", "scanner", "wasm"]
+  "keywords": [
+    "ai-agent",
+    "agent-security",
+    "prompt-injection",
+    "mcp",
+    "scanner",
+    "wasm"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }
