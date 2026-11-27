@@ -15,6 +15,7 @@ pub mod rng;
 pub mod scan;
 pub mod session;
 pub mod sign;
+pub mod skin;
 pub mod strain;
 pub mod targets;
 pub mod time;

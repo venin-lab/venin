@@ -1,8 +1,9 @@
-//! The ward's tools: their specs, and a pure `apply` over a fake ledger that runs the skin genes and records which
-//! gene stopped a call or changed what the body read.
+//! The ward's tools: their specs, and a pure `apply` over a fake ledger that runs the skin genes (`skin`) and records
+//! which gene stopped a call or changed what the body read.
 
-use crate::gene::{Gene, Kind, Rule};
-use crate::strain::{fold, is_hidden, reveals};
+use crate::gene::Rule;
+use crate::skin::{self, Allowed, Call, READ_FILTERS, Skin, WITHHELD_TOOL, filter};
+use crate::strain::fold;
 use crate::world::World;
 use serde_json::{Map, Value, json};
 
@@ -60,31 +61,7 @@ pub fn destinations(name: &str) -> &'static [&'static str] {
         .map_or(&[], |(_, args)| args)
 }
 
-const READ_FILTERS: [Rule; 4] = [
-    Rule::StripHidden,
-    Rule::StripComments,
-    Rule::QuarantineToolText,
-    Rule::Datamark,
-];
-
-const CALL_CHECKS: [Rule; 7] = [
-    Rule::OneAction,
-    Rule::AllowlistPayees,
-    Rule::AmountCap,
-    Rule::DomainAllowlist,
-    Rule::PlanLock,
-    Rule::EgressCanary,
-    Rule::Datamark,
-];
-
 const BLOCKED: &str = r#"{"error":"blocked by policy"}"#;
-const WITHHELD_SKILL: &str = "[skill text withheld by policy]";
-const WITHHELD_TOOL: &str = "Third-party tool. Its description was withheld by policy.";
-
-/// What `datamark` puts in place of every space in text the body reads.
-pub fn datamark_char() -> char {
-    char::from_u32(0x2c6).expect("a valid code point")
-}
 
 fn description(name: &str) -> &'static str {
     match name {
@@ -131,32 +108,6 @@ fn parameters(name: &str) -> Value {
 
 fn spec(name: &str, description: &str, parameters: Value) -> Value {
     json!({"type": "function", "function": {"name": name, "description": description, "parameters": parameters}})
-}
-
-/// The skin genes of a genome, in id order.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Skin {
-    genes: Vec<Gene>,
-}
-
-impl Skin {
-    pub fn new(genes: &[&Gene]) -> Self {
-        let mut genes: Vec<Gene> = genes
-            .iter()
-            .filter(|g| g.kind == Kind::Skin)
-            .map(|g| (*g).clone())
-            .collect();
-        genes.sort_by(|a, b| a.id.cmp(&b.id));
-        Skin { genes }
-    }
-
-    fn with(&self, rule: Rule) -> impl Iterator<Item = &Gene> {
-        self.genes.iter().filter(move |g| g.rule == Some(rule))
-    }
-
-    fn first(&self, rule: Rule) -> Option<&Gene> {
-        self.with(rule).next()
-    }
 }
 
 /// The tool list for the request, and whether it carries attacker text the body will read.
@@ -397,82 +348,6 @@ impl<'a> Reader<'a> {
     }
 }
 
-/// `text` after the skin's filters among `rules`, and the genes that changed it.
-fn filter(text: &str, skin: &Skin, rules: &[Rule]) -> (String, Vec<String>) {
-    let mut out = text.to_string();
-    let mut changed = Vec::new();
-    for rule in rules {
-        let Some(gene) = skin.first(*rule) else {
-            continue;
-        };
-        let next = match rule {
-            Rule::StripHidden => {
-                strip_invisible_spans(&out.chars().filter(|c| !is_hidden(*c)).collect::<String>())
-            }
-            Rule::StripComments => strip_comments(&out),
-            Rule::QuarantineToolText => WITHHELD_SKILL.to_string(),
-            Rule::Datamark => out.replace(' ', &datamark_char().to_string()),
-            _ => continue,
-        };
-        if next != out {
-            changed.push(gene.id.clone());
-            out = next;
-        }
-    }
-    (out, changed)
-}
-
-fn strip_comments(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some(start) = rest.find("<!--") {
-        out.push_str(&rest[..start]);
-        rest = rest[start + 4..]
-            .find("-->")
-            .map_or("", |end| &rest[start + 4 + end + 3..]);
-    }
-    out.push_str(rest);
-    out
-}
-
-/// Drops `<span style="...">...</span>` elements styled to be invisible.
-fn strip_invisible_spans(text: &str) -> String {
-    const INVISIBLE: [&str; 6] = [
-        "color:#fff",
-        "color:white",
-        "font-size:0",
-        "font-size:1px",
-        "display:none",
-        "opacity:0",
-    ];
-    let lower = text.to_ascii_lowercase();
-    let mut out = String::with_capacity(text.len());
-    let mut at = 0;
-    while let Some(found) = lower[at..].find("<span") {
-        let start = at + found;
-        let Some(open_end) = lower[start..].find('>').map(|i| start + i + 1) else {
-            break;
-        };
-        let style: String = lower[start..open_end]
-            .chars()
-            .filter(|c| !c.is_whitespace())
-            .collect();
-        let close = lower[open_end..]
-            .find("</span>")
-            .map(|i| open_end + i + "</span>".len());
-        out.push_str(&text[at..start]);
-        match close {
-            Some(end) if INVISIBLE.iter().any(|s| style.contains(s)) => at = end,
-            _ => {
-                out.push_str(&text[start..open_end]);
-                at = open_end;
-            }
-        }
-    }
-    out.push_str(&text[at..]);
-    out
-}
-
 fn act(
     world: &World,
     skin: &Skin,
@@ -496,45 +371,30 @@ fn act(
         }
         0
     };
-    let strings: Vec<&str> = args.values().filter_map(Value::as_str).collect();
-    let to_folded = fold(to);
-    for rule in CALL_CHECKS {
-        for gene in skin.with(rule) {
-            let stops = match rule {
-                Rule::OneAction => ledger.actions() >= 1,
-                Rule::AllowlistPayees => funds && !world.in_book(to),
-                Rule::AmountCap => funds && gene.cap_cents().is_some_and(|cap| amount > cap),
-                Rule::DomainAllowlist => {
-                    !funds && {
-                        let domain = to_folded
-                            .rsplit('@')
-                            .next()
-                            .unwrap_or_default()
-                            .trim_end_matches('.');
-                        domain != world.owner.domain
-                            && !gene
-                                .domains(&world.owner.domain)
-                                .iter()
-                                .any(|d| d == domain)
-                    }
-                }
-                Rule::PlanLock => {
-                    !fold(&world.prompt).contains(&to_folded)
-                        && !world.in_book(to)
-                        && to_folded != world.owner.email
-                }
-                Rule::EgressCanary => strings.iter().any(|s| reveals(s, &world.canary)),
-                Rule::Datamark => strings.iter().any(|s| s.contains(datamark_char())),
-                _ => false,
-            };
-            if stops {
-                return Applied {
-                    stopped_by: Some(gene.id.clone()),
-                    executed: false,
-                    ..Applied::ok(BLOCKED.into())
-                };
-            }
-        }
+    let call = Call {
+        funds,
+        to,
+        amount_cents: amount,
+        strings: args.values().filter_map(Value::as_str).collect(),
+    };
+    let allowed = Allowed {
+        book: world
+            .payees
+            .iter()
+            .filter(|p| p.book)
+            .map(|p| p.address.clone())
+            .collect(),
+        domain: world.owner.domain.clone(),
+        email: world.owner.email.clone(),
+        plan: fold(&world.prompt),
+        secrets: vec![world.canary.clone()],
+    };
+    if let Some(gene) = skin::stops(skin, &allowed, ledger.actions(), &call) {
+        return Applied {
+            stopped_by: Some(gene.id.clone()),
+            executed: false,
+            ..Applied::ok(BLOCKED.into())
+        };
     }
     if funds {
         if amount > ledger.balance_cents {
@@ -561,6 +421,7 @@ fn act(
 mod tests {
     use super::*;
     use crate::gene::tests::skin;
+    use crate::skin::{WITHHELD_SKILL, datamark_char, strip_comments};
     use crate::strain::{Carrier, Goal, Operator, Route, mutate, tests::sample};
     use crate::targets::Targets;
     use crate::world::tests::{BENIGN, FRAME, task};

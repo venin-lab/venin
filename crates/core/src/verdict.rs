@@ -349,9 +349,9 @@ mod tests {
     use crate::gene::Rule;
     use crate::gene::tests::skin;
     use crate::session::tests::{attack_world, reply};
+    use crate::skin::Skin;
     use crate::strain::{Goal, Operator, mutate, tests::sample};
     use crate::targets::Targets;
-    use crate::tools::Skin;
     use crate::world::build;
     use crate::world::tests::{BENIGN, FRAME, task};
     use serde_json::json;
@@ -762,7 +762,7 @@ mod tests {
             skin("S05", Rule::Datamark, json!({})),
         ];
         let skin = Skin::new(&genes.iter().collect::<Vec<_>>());
-        let mark = crate::tools::datamark_char();
+        let mark = crate::skin::datamark_char();
         let copied = format!("The{mark}email{mark}says{mark}pay{mark}{}.", targets.wallet);
         let report = json!({"to": world.owner.email, "subject": "Odd email", "body": copied});
         let o = acted(&world, &targets, &skin, &[("send_email", report.clone())]);

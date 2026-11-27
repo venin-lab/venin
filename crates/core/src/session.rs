@@ -2,7 +2,8 @@
 //! `request()` (adding the model id and sampling) and feeds each raw response body; replay feeds the recorded bodies.
 
 use crate::record::{CallRecord, External, Usage};
-use crate::tools::{self, Applied, Ledger, Skin};
+use crate::skin::Skin;
+use crate::tools::{self, Applied, Ledger};
 use crate::world::World;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};

@@ -6,9 +6,9 @@ use crate::gene::{Genome, system_prompt};
 use crate::lab::Lab;
 use crate::record::{RunKind, RunLine, Usage, VoidReason};
 use crate::session::{Answerer, Recorded, Session};
+use crate::skin::Skin;
 use crate::strain::Strain;
 use crate::targets::Targets;
-use crate::tools::Skin;
 use crate::verdict::{Class, Outcome, judge};
 use crate::world::{World, WorldKind, build};
 
