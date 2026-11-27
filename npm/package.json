@@ -1,6 +1,6 @@
 {
   "name": "@veninlab/venin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The Venin check-up as WebAssembly: finds orders planted in an AI agent's skills, memory notes and settings.",
   "license": "MIT",
   "type": "module",
@@ -13,7 +13,11 @@
   "files": ["index.js", "index.d.ts", "venin_core.js", "venin_core_bg.wasm"],
   "scripts": {
     "build": "node ../web/scripts/wasm.mjs && cp ../web/src/wasm/venin_core.js ../web/src/wasm/venin_core_bg.wasm ../LICENSE .",
+    "prepack": "npm run build",
     "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "homepage": "https://venin.io/checkup",
   "repository": {
