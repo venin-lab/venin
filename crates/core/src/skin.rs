@@ -1,5 +1,5 @@
 //! The skin genes as pure checks, with no world in them: the filters on text a body reads, and the decision on one
-//! acting call. `tools` runs them on the ward's fake ledger.
+//! acting call. `tools` runs them on the ward's fake ledger, and `guard` runs the same code on any agent's tools.
 
 use crate::gene::{Gene, Kind, Rule};
 use crate::strain::{fold, is_hidden, reveals};

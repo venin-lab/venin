@@ -13,3 +13,7 @@ dist/
 /npm/LICENSE
 /npm/venin_core*
 /npm/*.tgz
+/genes/LICENSE
+/genes/RULES.md
+/genes/venin_core*
+/genes/*.tgz

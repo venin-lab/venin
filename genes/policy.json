@@ -1,0 +1,13 @@
+{
+  "genes": ["I01", "I03", "I04", "I05", "I06", "I07", "I10", "S01", "S02", "S07", "S08", "S09"],
+  "owner": "",
+  "address_book": [],
+  "plan": "",
+  "secrets": [],
+  "pay": {
+    "send_funds": { "to": ["to", "recipient", "address"], "amount": "amount" }
+  },
+  "send": {
+    "send_email": { "to": ["to", "cc", "bcc", "recipients"] }
+  }
+}

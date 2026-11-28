@@ -1,0 +1,43 @@
+{
+  "name": "@veninlab/genes",
+  "version": "0.1.0",
+  "description": "The Venin lab's tool-side checks as WebAssembly: rules on an AI agent's payment and message calls, filters on what it reads, and a stdio MCP proxy that applies both.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./policy.json": "./policy.json"
+  },
+  "bin": {
+    "genes": "./bin.js"
+  },
+  "files": ["index.js", "index.d.ts", "bin.js", "policy.json", "RULES.md", "venin_core.js", "venin_core_bg.wasm"],
+  "scripts": {
+    "build": "node ../web/scripts/wasm.mjs && cp ../web/src/wasm/venin_core.js ../web/src/wasm/venin_core_bg.wasm ../LICENSE . && node bin.js rules > RULES.md",
+    "prepack": "npm run build",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "homepage": "https://venin.io/genes",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/venin-lab/venin.git",
+    "directory": "genes"
+  },
+  "keywords": [
+    "ai-agent",
+    "agent-security",
+    "prompt-injection",
+    "mcp",
+    "guardrails",
+    "wasm"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

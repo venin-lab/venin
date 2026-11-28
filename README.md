@@ -150,7 +150,14 @@ target/release/venin scan path/to/agent
 It reads rules, skills, MCP configs and tool descriptions locally and reports hidden characters, planted orders,
 acting tools that run without asking, wide permissions and pay tools without a host allowlist or a restart-safe cap,
 with the genes that cover each finding. Files that look like secrets are skipped before reading; findings print names,
-paths and counts, never values. `/checkup` on the site does the same in the browser, with no upload.
+paths and counts, never values. `/checkup` on the site does the same in the browser, with no upload, and
+[@veninlab/venin](npm/README.md) in Node.
+
+## Put the genes on your agent
+
+[@veninlab/genes](genes/README.md) runs the lab's skin genes on your own agent's tool calls: the function the ward
+calls on every acting call (`crates/core/src/skin.rs`), compiled to WebAssembly, with the ward's read filters, the
+instinct genes as paste-ready prompt rules, and a stdio MCP proxy that applies them to any MCP server.
 
 ## Layout
 
@@ -158,6 +165,8 @@ paths and counts, never values. `/checkup` on the site does the same in the brow
 crates/core/      the lab's rules, pure: strains, genes, worlds, judging, evolution, record, replay, verify, scan
 crates/venin/     the venin binary: runner, genesis, verify, cards, scan, library build, launch commands
 harness/priors/   the sandbox for Priors bodies: the fetched Priors files under Node's permission model
+npm/              @veninlab/venin: the check-up as WebAssembly for Node
+genes/            @veninlab/genes: the skin genes, the instinct rules and the MCP proxy for any agent
 library/          strains, genes, tasks, rows, names of variants of concern, pinned sources, calibration, the
                   attack round's prompt
 web/              the site (Vite, Preact, Three.js) and the card renderer

@@ -6,6 +6,7 @@ pub mod ecology;
 pub mod evolve;
 pub mod gate;
 pub mod gene;
+pub mod guard;
 pub mod hour;
 pub mod json;
 pub mod lab;

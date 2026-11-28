@@ -1,14 +1,16 @@
-//! The core as the site calls it: JSON text in, JSON text out. The functions are plain Rust so native tests reach
-//! them; on wasm32 each is exported through wasm-bindgen under its short name (`verify`, `replay`, `scan`, `gate`,
-//! `mutate`). Input that does not parse comes back as `{"error": "..."}`.
+//! The core as the site and the npm packages call it: JSON text in, JSON text out. The functions are plain Rust so
+//! native tests reach them; on wasm32 each is exported through wasm-bindgen under its short name (`verify`, `replay`,
+//! `scan`, `gate`, `mutate`, `defend_gate`, and the guard's `genes_*`). Input that does not parse comes back as
+//! `{"error": "..."}`.
 
+use crate::guard::{Decision, Guard};
 use crate::lab::{Exam, Lab, Manifest};
 use crate::record::RunLine;
 use crate::rng::Stream;
 use crate::strain::{Operator, Route, Strain, mutate};
 use crate::verify::{Bundle, Chain, LibraryFiles, Report, Takedown, verify};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use std::collections::BTreeMap;
 
 fn error(message: impl std::fmt::Display) -> String {
@@ -246,6 +248,135 @@ pub fn mutate_json(strain: &str, operator: &str, seed_hex: &str) -> String {
     }
 }
 
+/// A guard's policy resolved: `{genes, rules, acting}` (`acting` the tool names it checks, trimmed and in lower
+/// case), or an error for a policy the guard cannot read.
+pub fn genes_guard_json(policy: &str) -> String {
+    match Guard::new(policy) {
+        Ok(g) => json!({ "genes": g.genes, "rules": g.rules, "acting": g.acting() }).to_string(),
+        Err(e) => error(e),
+    }
+}
+
+/// The rules text of the gene ids in `genes` (a JSON array): `{rules}`.
+pub fn genes_rules_json(genes: &str) -> String {
+    match parse::<Vec<String>>("genes", genes).and_then(|ids| crate::guard::rules(&ids)) {
+        Ok(rules) => json!({ "rules": rules }).to_string(),
+        Err(e) => error(e),
+    }
+}
+
+/// The decision on calling `tool` with `args` (a JSON object) after `actions` allowed actions of the session:
+/// `{allow, actions, gene, reason}`.
+pub fn genes_check_json(policy: &str, actions: u32, tool: &str, args: &str) -> String {
+    let run = || -> Result<Decision, String> {
+        let guard = Guard::new(policy)?;
+        let args: Map<String, Value> = parse("args", args)?;
+        Ok(guard.check(actions as usize, tool, &args))
+    };
+    match run() {
+        Ok(d) => serde_json::to_string(&d).unwrap_or_else(error),
+        Err(e) => error(e),
+    }
+}
+
+/// Text the agent reads, after the policy's read filters: `{text, genes}`.
+pub fn genes_clean_json(policy: &str, text: &str) -> String {
+    match Guard::new(policy) {
+        Ok(g) => {
+            let (text, genes) = g.clean(text);
+            json!({ "text": text, "genes": genes }).to_string()
+        }
+        Err(e) => error(e),
+    }
+}
+
+/// Texts (a JSON array of strings) after the policy's read filters, each as `genes_clean` gives it: `{texts}`.
+pub fn genes_clean_all_json(policy: &str, texts: &str) -> String {
+    let run = || -> Result<Value, String> {
+        let guard = Guard::new(policy)?;
+        let texts: Vec<String> = parse("texts", texts)?;
+        Ok(json!({ "texts": guard.clean_all(&texts) }))
+    };
+    match run() {
+        Ok(v) => v.to_string(),
+        Err(e) => error(e),
+    }
+}
+
+/// Texts (a JSON array of strings) with the characters that render as nothing dropped, whatever the policy: `{texts}`.
+pub fn genes_visible_all_json(texts: &str) -> String {
+    match parse::<Vec<String>>("texts", texts) {
+        Ok(texts) => {
+            let texts: Vec<String> = texts
+                .iter()
+                .map(|t| crate::guard::visible_chars(t))
+                .collect();
+            json!({ "texts": texts }).to_string()
+        }
+        Err(e) => error(e),
+    }
+}
+
+/// The gene that stops a client message (a JSON value) for carrying a watched secret: `{gene}`, null when none does.
+pub fn genes_leaks_json(policy: &str, message: &str) -> String {
+    let run = || -> Result<Value, String> {
+        let guard = Guard::new(policy)?;
+        let message: Value = parse("message", message)?;
+        Ok(json!({ "gene": guard.leaks(&message) }))
+    };
+    match run() {
+        Ok(v) => v.to_string(),
+        Err(e) => error(e),
+    }
+}
+
+/// A third-party list of prompts, resources or templates (a JSON array) after the policy: `{entries, notes}`.
+pub fn genes_entries_json(policy: &str, entries: &str) -> String {
+    let run = || -> Result<Value, String> {
+        let guard = Guard::new(policy)?;
+        let entries: Vec<Value> = parse("entries", entries)?;
+        let (entries, notes) = guard.entries(&entries);
+        let notes: Vec<Value> = notes
+            .into_iter()
+            .map(|(entry, why)| json!({ "entry": entry, "why": why }))
+            .collect();
+        Ok(json!({ "entries": entries, "notes": notes }))
+    };
+    match run() {
+        Ok(v) => v.to_string(),
+        Err(e) => error(e),
+    }
+}
+
+/// A third-party server's instructions after the policy: `{text, why}`, `why` null when they were kept.
+pub fn genes_instructions_json(policy: &str, text: &str) -> String {
+    match Guard::new(policy) {
+        Ok(g) => {
+            let (text, why) = g.instructions(text);
+            json!({ "text": text, "why": why }).to_string()
+        }
+        Err(e) => error(e),
+    }
+}
+
+/// A third-party tool list (a JSON array) after the policy: `{tools, notes: [{tool, why}]}`.
+pub fn genes_tools_json(policy: &str, tools: &str) -> String {
+    let run = || -> Result<Value, String> {
+        let guard = Guard::new(policy)?;
+        let tools: Vec<Value> = parse("tools", tools)?;
+        let (tools, notes) = guard.tools(&tools);
+        let notes: Vec<Value> = notes
+            .into_iter()
+            .map(|(tool, why)| json!({ "tool": tool, "why": why }))
+            .collect();
+        Ok(json!({ "tools": tools, "notes": notes }))
+    };
+    match run() {
+        Ok(v) => v.to_string(),
+        Err(e) => error(e),
+    }
+}
+
 #[cfg(target_arch = "wasm32")]
 mod exports {
     use wasm_bindgen::prelude::wasm_bindgen;
@@ -278,6 +409,56 @@ mod exports {
     #[wasm_bindgen]
     pub fn defend_gate(rules: &str) -> String {
         super::defend_gate_json(rules)
+    }
+
+    #[wasm_bindgen]
+    pub fn genes_guard(policy: &str) -> String {
+        super::genes_guard_json(policy)
+    }
+
+    #[wasm_bindgen]
+    pub fn genes_rules(genes: &str) -> String {
+        super::genes_rules_json(genes)
+    }
+
+    #[wasm_bindgen]
+    pub fn genes_clean_all(policy: &str, texts: &str) -> String {
+        super::genes_clean_all_json(policy, texts)
+    }
+
+    #[wasm_bindgen]
+    pub fn genes_visible_all(texts: &str) -> String {
+        super::genes_visible_all_json(texts)
+    }
+
+    #[wasm_bindgen]
+    pub fn genes_leaks(policy: &str, message: &str) -> String {
+        super::genes_leaks_json(policy, message)
+    }
+
+    #[wasm_bindgen]
+    pub fn genes_entries(policy: &str, entries: &str) -> String {
+        super::genes_entries_json(policy, entries)
+    }
+
+    #[wasm_bindgen]
+    pub fn genes_instructions(policy: &str, text: &str) -> String {
+        super::genes_instructions_json(policy, text)
+    }
+
+    #[wasm_bindgen]
+    pub fn genes_check(policy: &str, actions: u32, tool: &str, args: &str) -> String {
+        super::genes_check_json(policy, actions, tool, args)
+    }
+
+    #[wasm_bindgen]
+    pub fn genes_clean(policy: &str, text: &str) -> String {
+        super::genes_clean_json(policy, text)
+    }
+
+    #[wasm_bindgen]
+    pub fn genes_tools(policy: &str, tools: &str) -> String {
+        super::genes_tools_json(policy, tools)
     }
 }
 
@@ -357,6 +538,100 @@ mod tests {
         assert_eq!(out["read"], 5);
         assert!(out["findings"].as_array().is_some_and(|f| f.len() > 8));
         assert!(value(&scan_json("[]"))["error"].is_string());
+    }
+
+    #[test]
+    fn the_guard_answers_in_json_and_refuses_what_it_cannot_read() {
+        let policy = r#"{"genes":["I06","S01"],"address_book":["0xaa"],"pay":{"pay":{}}}"#;
+        let made = value(&genes_guard_json(policy));
+        assert_eq!(made["genes"], json!(["I06", "S01"]));
+        assert_eq!(made["acting"], json!(["pay"]));
+        assert_eq!(
+            value(&genes_rules_json(r#"["I06"]"#))["rules"],
+            made["rules"]
+        );
+        assert!(value(&genes_rules_json("[1]"))["error"].is_string());
+        let kept = value(&genes_instructions_json(policy, "Use these tools."));
+        assert_eq!(kept, json!({"text": "Use these tools.", "why": null}));
+        assert_eq!(
+            value(&genes_clean_all_json(policy, r#"["a b", "c"]"#)),
+            json!({"texts": ["a b", "c"]})
+        );
+        let listed = value(&genes_entries_json(
+            policy,
+            r#"[{"name": "p", "description": "Prompt."}]"#,
+        ));
+        assert_eq!(
+            listed,
+            json!({"entries": [{"name": "p", "description": "Prompt."}], "notes": []})
+        );
+        let tag = char::from_u32(0xe0041).expect("a tag character");
+        assert_eq!(
+            value(&genes_visible_all_json(
+                &json!([format!("2025-06-18{tag}")]).to_string()
+            )),
+            json!({"texts": ["2025-06-18"]})
+        );
+        let watching = r#"{"genes":["S07"],"secrets":["vnk_0123456789abcdef"],"send":{"mail":{}}}"#;
+        let leak = r#"{"method":"resources/read","params":{"uri":"https://x.example/?k=vnk_0123456789abcdef"}}"#;
+        assert_eq!(
+            value(&genes_leaks_json(watching, leak)),
+            json!({"gene": "S07"})
+        );
+        assert_eq!(
+            value(&genes_leaks_json(watching, "{}")),
+            json!({"gene": null})
+        );
+        assert!(
+            made["rules"]
+                .as_str()
+                .is_some_and(|r| r.contains("address book"))
+        );
+        let stopped = value(&genes_check_json(
+            policy,
+            0,
+            "pay",
+            r#"{"to":"0xbb","amount":"1"}"#,
+        ));
+        assert_eq!(
+            stopped,
+            json!({"allow": false, "actions": 0, "gene": "S01", "reason": "the payee is not in the address book"})
+        );
+        assert_eq!(
+            value(&genes_check_json(
+                policy,
+                0,
+                "pay",
+                r#"{"to":"0xaa","amount":1}"#
+            ))["allow"],
+            true
+        );
+        assert!(value(&genes_check_json(policy, 0, "pay", "[]"))["error"].is_string());
+        assert_eq!(
+            value(&genes_clean_json(policy, "a b")),
+            json!({"text": "a b", "genes": []})
+        );
+        let tools = value(&genes_tools_json(
+            policy,
+            r#"[{"name":"x","description":"Adds."}]"#,
+        ));
+        assert_eq!(
+            tools,
+            json!({"tools": [{"name": "x", "description": "Adds."}], "notes": []})
+        );
+        for out in [
+            genes_guard_json("{}"),
+            genes_check_json("{}", 0, "pay", "{}"),
+            genes_clean_json("{}", ""),
+            genes_instructions_json("{}", ""),
+            genes_clean_all_json(policy, "{}"),
+            genes_entries_json(policy, "{}"),
+            genes_visible_all_json("{}"),
+            genes_leaks_json("{}", "{}"),
+            genes_tools_json(policy, "{}"),
+        ] {
+            assert!(value(&out)["error"].is_string(), "{out}");
+        }
     }
 
     #[test]
